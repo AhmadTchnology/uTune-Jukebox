@@ -457,14 +457,41 @@ class UI:
             )
 
     def _draw_progress_bar(self, x, y, w):
+        track = self.player.current_track
+        if not track:
+            return
+            
         if not self.player.play_start_time:
+            # Show a loading/buffering indicator instead
+            bar_h = 2
+            bg_surf = pygame.Surface((w, bar_h), pygame.SRCALPHA)
+            bg_surf.fill((255, 255, 255, 18))
+            self.screen.blit(bg_surf, (x, y))
+            
+            # Draw a pulsing small bar
+            pulse_w = 40
+            pulse_x = int((w - pulse_w) * ((math.sin(self.pulse_phase * 3) + 1) / 2))
+            pygame.draw.rect(
+                self.screen, Colors.PROGRESS_FILL,
+                pygame.Rect(x + pulse_x, y, pulse_w, bar_h),
+                border_radius=1,
+            )
+            
+            time_y = y + 8
+            el_surf = self.font_time.render("Loading...", True, Colors.CYAN)
+            el_surf.set_alpha(180)
+            self.screen.blit(el_surf, (x, time_y))
             return
 
         elapsed = _time.time() - self.player.play_start_time
-        # Estimate duration (we don't have exact duration, show elapsed)
-        # Just show the elapsed time with a cycling progress bar
-        duration = max(elapsed, 240)  # Assume ~4 min if unknown
-        pct = min(1.0, elapsed / duration)
+        
+        duration = track.get("duration")
+        if duration:
+            duration_val = float(duration)
+            pct = min(1.0, elapsed / duration_val)
+        else:
+            duration_val = elapsed
+            pct = 1.0
 
         # Track bar background
         bar_h = 2
@@ -486,17 +513,17 @@ class UI:
         secs = int(elapsed) % 60
         elapsed_str = f"{mins}:{secs:02d}"
 
-        dur_mins = int(duration) // 60
-        dur_secs = int(duration) % 60
-        dur_str = f"{dur_mins}:{dur_secs:02d}"
-
         time_y = y + 8
         el_surf = self.font_time.render(elapsed_str, True, Colors.CYAN)
         el_surf.set_alpha(180)
         self.screen.blit(el_surf, (x, time_y))
 
-        dur_surf = self.font_time.render(dur_str, True, Colors.TEXT_MUTED)
-        self.screen.blit(dur_surf, (x + w - dur_surf.get_width(), time_y))
+        if duration:
+            dur_mins = int(duration_val) // 60
+            dur_secs = int(duration_val) % 60
+            dur_str = f"{dur_mins}:{dur_secs:02d}"
+            dur_surf = self.font_time.render(dur_str, True, Colors.TEXT_MUTED)
+            self.screen.blit(dur_surf, (x + w - dur_surf.get_width(), time_y))
 
     def _draw_idle_state(self, x, y, w):
         # Centered idle prompt — NFC-style

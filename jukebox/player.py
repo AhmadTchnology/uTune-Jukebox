@@ -66,6 +66,9 @@ class Player:
         if cookies_file and os.path.isfile(cookies_file):
             ytdlp_cmd.extend(["--cookies", cookies_file])
         elif cookies_browser:
+            if cookies_browser.lower() == "operagx":
+                appdata = os.environ.get('APPDATA', '')
+                cookies_browser = f"opera:{appdata}\\Opera Software\\Opera GX Stable"
             ytdlp_cmd.extend(["--cookies-from-browser", cookies_browser])
 
         ytdlp_cmd.append(url)
@@ -73,8 +76,9 @@ class Player:
         mpv_cmd = [
             self.mpv_path,
             "--no-video",
-            "--really-quiet",
-            "--terminal=no",
+            "--quiet",
+            "--term-playing-msg=PLAYBACK_STARTED",
+            "--terminal=yes",
             "-" # Read from stdin
         ]
 
@@ -99,9 +103,12 @@ class Player:
             self.mpv_process = subprocess.Popen(
                 mpv_cmd,
                 stdin=self.ytdlp_process.stdout,
-                stdout=subprocess.DEVNULL,
+                stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                text=True,
+                encoding='utf-8',
+                errors='ignore'
             )
             
             # Close python's handle to stdout so mpv is the only reader
@@ -109,7 +116,15 @@ class Player:
             self.ytdlp_process.stdout.close()
             
             self._report(f"Playing: {title}")
-            self.play_start_time = time.time()
+            
+            def wait_for_playback():
+                if self.mpv_process and self.mpv_process.stdout:
+                    for line in iter(self.mpv_process.stdout.readline, ''):
+                        if "PLAYBACK_STARTED" in line:
+                            with self.lock:
+                                self.play_start_time = time.time()
+            
+            threading.Thread(target=wait_for_playback, daemon=True).start()
             
             # Wait for mpv to finish playing
             self.mpv_process.wait()
@@ -149,6 +164,9 @@ class Player:
             if cookies_file and os.path.exists(cookies_file):
                 cmd.extend(["--cookies", cookies_file])
             elif cookies_browser:
+                if cookies_browser.lower() == "operagx":
+                    appdata = os.environ.get('APPDATA', '')
+                    cookies_browser = f"opera:{appdata}\\Opera Software\\Opera GX Stable"
                 cmd.extend(["--cookies-from-browser", cookies_browser])
 
             proc = subprocess.run(
@@ -160,6 +178,10 @@ class Player:
                 artist = data.get("artist") or data.get("uploader") or data.get("channel")
                 if artist:
                     track_info["artist"] = artist
+                
+                duration = data.get("duration")
+                if duration:
+                    track_info["duration"] = duration
                 
                 thumbnail_url = data.get("thumbnail")
                 if thumbnail_url:

@@ -44,6 +44,9 @@ class JukeboxQueue:
                 if cookies_file and os.path.exists(cookies_file):
                     cmd.extend(["--cookies", cookies_file])
                 elif cookies_browser:
+                    if cookies_browser.lower() == "operagx":
+                        appdata = os.environ.get('APPDATA', '')
+                        cookies_browser = f"opera:{appdata}\\Opera Software\\Opera GX Stable"
                     cmd.extend(["--cookies-from-browser", cookies_browser])
             except ImportError:
                 pass
@@ -57,6 +60,10 @@ class JukeboxQueue:
                 artist = data.get("artist") or data.get("uploader") or data.get("channel")
                 if artist:
                     item['artist'] = artist
+                
+                duration = data.get("duration")
+                if duration:
+                    item["duration"] = duration
                 
                 thumbnail_url = data.get("thumbnail")
                 if thumbnail_url:
