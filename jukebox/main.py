@@ -20,9 +20,6 @@ def main():
     queue_mgr = JukeboxQueue()
     player = Player(mpv_path=config.mpv_path, ytdlp_format=config.ytdlp_format)
     
-    # We create the UI instance but it has to run in the main thread
-    ui = UI(config, queue_mgr, player)
-    
     def on_rfid_scan(uid):
         print(f"Scanned UID: {uid}")
         card = registry.get_card(uid)
@@ -36,6 +33,9 @@ def main():
                 ui.show_toast(f"Already playing or in queue", 2.0)
         else:
             ui.show_toast(f"Unknown Card: {uid}", 3.0)
+
+    # We create the UI instance but it has to run in the main thread
+    ui = UI(config, queue_mgr, player, on_scan=on_rfid_scan)
 
     reader = RFIDReader(callback=on_rfid_scan)
     

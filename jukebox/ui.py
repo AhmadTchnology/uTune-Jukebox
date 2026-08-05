@@ -27,11 +27,13 @@ class Colors:
 
 
 class UI:
-    def __init__(self, config, queue_mgr, player):
+    def __init__(self, config, queue_mgr, player, on_scan=None):
         self.config = config
         self.queue_mgr = queue_mgr
         self.player = player
+        self.on_scan = on_scan
         self.running = False
+        self._key_buffer = ""
 
         pygame.init()
         self.width, self.height = self.config.ui_resolution
@@ -137,6 +139,12 @@ class UI:
                         self.running = False
                     elif event.key == pygame.K_s:
                         self.player.skip()
+                    elif event.unicode.isdigit():
+                        self._key_buffer += event.unicode
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        if self._key_buffer and self.on_scan:
+                            self.on_scan(self._key_buffer)
+                        self._key_buffer = ""
 
             self._update(dt)
             self._draw()
