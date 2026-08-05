@@ -1,0 +1,25 @@
+# Secrets
+cookies.txt
+
+# Databases
+jukebox.db
+
+# Executables
+deno.exe
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDEs & Tools
+.vscode/
+
+# Agents
+.agents/
+
+# Documents
+rfid-jukebox.md
+
+# Logs
+*.log

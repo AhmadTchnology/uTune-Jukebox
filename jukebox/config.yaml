@@ -1,0 +1,22 @@
+db_path: "jukebox.db"
+rfid:
+  # For Linux (mfrc522 / spidev): mode="mfrc522"
+  # For Windows (USB Keyboard Emulator or USB Serial): mode="serial" or mode="keyboard"
+  mode: "keyboard"
+  debounce_seconds: 5.0
+  serial_port: "COM3"
+  baud_rate: 9600
+player:
+  # Can be empty, uses system path if so
+  mpv_path: "C:\\Program Files\\MPV Player\\mpv.exe"
+  ytdlp_format: "bestaudio/best"
+  # Cookie options (pick ONE):
+  # Option 1: Browser name (edge, chrome, firefox) — only works if that browser is CLOSED
+  cookies_from_browser: ""
+  # Option 2: Path to a Netscape-format cookies.txt file (recommended)
+  # Export from browser using "Get cookies.txt LOCALLY" extension, save as cookies.txt
+  cookies_file: "cookies.txt"
+ui:
+  resolution: [1024, 600]
+  fullscreen: false
+  fps: 30

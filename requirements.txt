@@ -1,0 +1,16 @@
+# Audio and Video handling
+yt-dlp
+
+# User Interface
+pygame
+
+# Configuration parsing
+pyyaml
+
+# Serial RFID Reader (Windows/Linux)
+pyserial
+
+# Raspberry Pi specific RFID hardware (Only installs on Linux)
+mfrc522; sys_platform == 'linux'
+RPi.GPIO; sys_platform == 'linux'
+spidev; sys_platform == 'linux'
