@@ -27,51 +27,105 @@ class JukeboxQueue:
             return True
 
     def _fetch_metadata_bg(self, item):
+        self._fetch_local_metadata(item)
+
+    def _fetch_local_metadata(self, item):
         import json
-        import urllib.request
         import subprocess
         import shutil
         import os
+        import tempfile
         try:
-            ytdlp = shutil.which("yt-dlp") or "yt-dlp"
-            cmd = [ytdlp, "--dump-json", "--no-playlist", item['youtube_url']]
-            
-            # Use cookies if available
-            try:
-                from config import config
-                cookies_file = getattr(config, "ytdlp_cookies_file", None)
-                cookies_browser = getattr(config, "ytdlp_cookies_browser", None)
-                if cookies_file and os.path.exists(cookies_file):
-                    cmd.extend(["--cookies", cookies_file])
-                elif cookies_browser:
-                    if cookies_browser.lower() == "operagx":
-                        appdata = os.environ.get('APPDATA', '')
-                        cookies_browser = f"opera:{appdata}\\Opera Software\\Opera GX Stable"
-                    cmd.extend(["--cookies-from-browser", cookies_browser])
-            except ImportError:
-                pass
+            from config import config
+            file_path = item['youtube_url']
+            if not os.path.isabs(file_path):
+                file_path = os.path.join(config.music_folder, file_path)
 
+            # 1. Fallback metadata from yt-dlp json/thumbnail
+            base_path = os.path.splitext(file_path)[0]
+            json_path = base_path + ".info.json"
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    artist = data.get("artist") or data.get("uploader") or data.get("channel")
+                    if artist:
+                        item["artist"] = artist
+                    if data.get("duration"):
+                        item["duration"] = data["duration"]
+                    if data.get("title") and not item.get("title"):
+                        item["title"] = data["title"]
+                except Exception:
+                    pass
+            
+            for ext in [".webp", ".jpg", ".png", ".jpeg"]:
+                img_path = base_path + ext
+                if os.path.exists(img_path) and "image_bytes" not in item:
+                    try:
+                        with open(img_path, "rb") as f:
+                            item["image_bytes"] = f.read()
+                        break
+                    except Exception:
+                        pass
+
+            ffprobe = shutil.which("ffprobe")
+            if not ffprobe:
+                return
+
+            cmd = [
+                ffprobe, "-v", "quiet",
+                "-print_format", "json",
+                "-show_format", "-show_streams",
+                file_path,
+            ]
             proc = subprocess.run(
                 cmd, capture_output=True, text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
             if proc.returncode == 0:
                 data = json.loads(proc.stdout)
-                artist = data.get("artist") or data.get("uploader") or data.get("channel")
-                if artist:
-                    item['artist'] = artist
-                
-                duration = data.get("duration")
+                fmt = data.get("format", {})
+                tags_raw = fmt.get("tags", {})
+                tags = {k.lower(): v for k, v in tags_raw.items()}
+
+                duration = fmt.get("duration")
                 if duration:
-                    item["duration"] = duration
-                
-                thumbnail_url = data.get("thumbnail")
-                if thumbnail_url:
-                    req = urllib.request.Request(thumbnail_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=5) as resp:
-                        item["image_bytes"] = resp.read()
+                    item["duration"] = float(duration)
+
+                artist = tags.get("artist") or tags.get("album_artist")
+                if artist:
+                    item["artist"] = artist
+
+                title = tags.get("title")
+                if title:
+                    item["title"] = title
+
+            # Extract embedded cover art
+            ffmpeg = shutil.which("ffmpeg")
+            if ffmpeg:
+                tmp_cover = os.path.join(tempfile.gettempdir(), f"utune_q_{id(item)}.jpg")
+                extract_cmd = [
+                    ffmpeg, "-y", "-i", file_path,
+                    "-an", "-vcodec", "mjpeg", "-frames:v", "1",
+                    tmp_cover,
+                ]
+                cover_proc = subprocess.run(
+                    extract_cmd, capture_output=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
+                if cover_proc.returncode == 0 and os.path.isfile(tmp_cover):
+                    with open(tmp_cover, "rb") as f:
+                        cover_data = f.read()
+                    if len(cover_data) > 100:
+                        item["image_bytes"] = cover_data
+                    try:
+                        os.remove(tmp_cover)
+                    except OSError:
+                        pass
         except Exception as e:
-            print("[Queue] Metadata fetch error:", e)
+            print("[Queue] Local metadata error:", e)
+
+
 
     def dequeue(self):
         """Blocks until a track is available, returns it."""

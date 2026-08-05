@@ -10,7 +10,9 @@ player:
   # Can be empty, uses system path if so
   mpv_path: "C:\\Program Files\\MPV Player\\mpv.exe"
   ytdlp_format: "bestaudio/best"
-  # Cookie options (pick ONE):
+  # Path to folder containing local audio files
+  music_folder: "music"
+  # Cookie options for YouTube (pick ONE):
   # Option 1: Browser name (edge, chrome, firefox) — only works if that browser is CLOSED
   cookies_from_browser: ""
   # Option 2: Path to a Netscape-format cookies.txt file (recommended)

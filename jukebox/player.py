@@ -6,11 +6,12 @@ import shutil
 import tempfile
 
 
+AUDIO_EXTENSIONS = {'.mp3', '.flac', '.wav', '.ogg', '.m4a', '.aac', '.wma', '.opus'}
+
+
 class Player:
-    def __init__(self, mpv_path="mpv", ytdlp_format="bestaudio/best"):
+    def __init__(self, mpv_path="mpv"):
         self.mpv_path = mpv_path
-        self.ytdlp_format = ytdlp_format
-        self.ytdlp_process = None
         self.mpv_process = None
         self.current_track = None
         self.is_playing = False
@@ -32,6 +33,9 @@ class Player:
         return shutil.which("yt-dlp") or "yt-dlp"
 
     def play(self, url, track_info=None):
+        self._play_local(url, track_info)
+
+    def _play_local(self, source, track_info=None):
         from config import config
 
         self.stop()
@@ -45,33 +49,22 @@ class Player:
         title = track_info["title"] if track_info else "Unknown"
         self._report(f"Loading: {title}")
 
+        # Resolve the file path
+        file_path = source
+        if not os.path.isabs(file_path):
+            file_path = os.path.join(config.music_folder, file_path)
+
+        if not os.path.isfile(file_path):
+            self.last_error = f"File not found: {os.path.basename(file_path)}"
+            self._report(self.last_error)
+            self._cleanup()
+            return
+
+        # Fetch local metadata in background
         if track_info:
-            threading.Thread(target=self._fetch_metadata_bg, args=(url, track_info), daemon=True).start()
-
-        ytdlp = self._find_ytdlp()
-        ytdlp_cmd = [
-            ytdlp, 
-            "-f", self.ytdlp_format, 
-            "-o", "-",  # output to stdout
-            "--no-playlist",
-            "--remote-components", "ejs:github"
-        ]
-
-        if os.path.exists("deno.exe"):
-            ytdlp_cmd.extend(["--js-runtimes", "deno:./deno.exe"])
-
-        cookies_file = getattr(config, "ytdlp_cookies_file", None)
-        cookies_browser = getattr(config, "ytdlp_cookies_browser", None)
-
-        if cookies_file and os.path.isfile(cookies_file):
-            ytdlp_cmd.extend(["--cookies", cookies_file])
-        elif cookies_browser:
-            if cookies_browser.lower() == "operagx":
-                appdata = os.environ.get('APPDATA', '')
-                cookies_browser = f"opera:{appdata}\\Opera Software\\Opera GX Stable"
-            ytdlp_cmd.extend(["--cookies-from-browser", cookies_browser])
-
-        ytdlp_cmd.append(url)
+            threading.Thread(
+                target=self._fetch_local_metadata, args=(file_path, track_info), daemon=True
+            ).start()
 
         mpv_cmd = [
             self.mpv_path,
@@ -79,125 +72,152 @@ class Player:
             "--quiet",
             "--term-playing-msg=PLAYBACK_STARTED",
             "--terminal=yes",
-            "-" # Read from stdin
+            file_path,
         ]
 
-        # Use temp files to capture errors without deadlocking pipes
-        err_file_yt = tempfile.TemporaryFile(mode='w+', encoding='utf-8', errors='ignore')
-        
         try:
             if self._stop_requested:
                 return
-                
+
             self._report("Starting audio stream...")
-            
-            # Start yt-dlp writing to stdout
-            self.ytdlp_process = subprocess.Popen(
-                ytdlp_cmd,
-                stdout=subprocess.PIPE,
-                stderr=err_file_yt,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-            )
-            
-            # Start mpv reading from yt-dlp's stdout
+
             self.mpv_process = subprocess.Popen(
                 mpv_cmd,
-                stdin=self.ytdlp_process.stdout,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
                 text=True,
                 encoding='utf-8',
-                errors='ignore'
+                errors='ignore',
             )
-            
-            # Close python's handle to stdout so mpv is the only reader
-            # If mpv exits, yt-dlp gets SIGPIPE and terminates cleanly
-            self.ytdlp_process.stdout.close()
-            
+
             self._report(f"Playing: {title}")
-            
+
             def wait_for_playback():
                 if self.mpv_process and self.mpv_process.stdout:
                     for line in iter(self.mpv_process.stdout.readline, ''):
                         if "PLAYBACK_STARTED" in line:
                             with self.lock:
                                 self.play_start_time = time.time()
-            
+
             threading.Thread(target=wait_for_playback, daemon=True).start()
-            
-            # Wait for mpv to finish playing
+
             self.mpv_process.wait()
-            
-            # Wait for yt-dlp to exit just in case
-            self.ytdlp_process.wait(timeout=5)
 
             if self.mpv_process.returncode != 0 and not self._stop_requested:
-                err_file_yt.seek(0)
-                stderr = err_file_yt.read().strip()
-                if stderr:
-                    self.last_error = stderr[:200]
-                else:
-                    self.last_error = f"mpv exited with code {self.mpv_process.returncode}"
-                    
+                self.last_error = f"mpv exited with code {self.mpv_process.returncode}"
                 self._report(f"Playback error: {self.last_error}")
 
         except FileNotFoundError:
-            self.last_error = f"mpv or yt-dlp not found"
+            self.last_error = "mpv not found"
             self._report(self.last_error)
         except Exception as e:
             self.last_error = str(e)
             self._report(f"Playback error: {e}")
         finally:
-            err_file_yt.close()
             self._cleanup()
 
-    def _fetch_metadata_bg(self, url, track_info):
-        import json
-        import urllib.request
+    def _fetch_local_metadata(self, file_path, track_info):
+        """Extract duration and album art from local audio files or yt-dlp sidecars."""
         try:
-            ytdlp = self._find_ytdlp()
-            cmd = [ytdlp, "--dump-json", "--no-playlist", url]
-            from config import config
-            cookies_file = getattr(config, "ytdlp_cookies_file", None)
-            cookies_browser = getattr(config, "ytdlp_cookies_browser", None)
-            if cookies_file and os.path.exists(cookies_file):
-                cmd.extend(["--cookies", cookies_file])
-            elif cookies_browser:
-                if cookies_browser.lower() == "operagx":
-                    appdata = os.environ.get('APPDATA', '')
-                    cookies_browser = f"opera:{appdata}\\Opera Software\\Opera GX Stable"
-                cmd.extend(["--cookies-from-browser", cookies_browser])
+            import json
+            import os
+            
+            base_path = os.path.splitext(file_path)[0]
+            json_path = base_path + ".info.json"
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                    artist = data.get("artist") or data.get("uploader") or data.get("channel")
+                    if artist:
+                        track_info["artist"] = artist
+                    if data.get("duration"):
+                        track_info["duration"] = float(data["duration"])
+                    if data.get("title") and not track_info.get("title"):
+                        track_info["title"] = data["title"]
+                except Exception:
+                    pass
+            
+            for ext in [".webp", ".jpg", ".png", ".jpeg"]:
+                img_path = base_path + ext
+                if os.path.exists(img_path) and "image_bytes" not in track_info:
+                    try:
+                        with open(img_path, "rb") as f:
+                            track_info["image_bytes"] = f.read()
+                        break
+                    except Exception:
+                        pass
 
+            ffprobe = shutil.which("ffprobe")
+            if not ffprobe:
+                return
+
+            cmd = [
+                ffprobe, "-v", "quiet",
+                "-print_format", "json",
+                "-show_format", "-show_streams",
+                file_path,
+            ]
             proc = subprocess.run(
                 cmd, capture_output=True, text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             )
             if proc.returncode == 0:
                 data = json.loads(proc.stdout)
-                artist = data.get("artist") or data.get("uploader") or data.get("channel")
+                fmt = data.get("format", {})
+                tags = fmt.get("tags", {})
+
+                duration = fmt.get("duration")
+                if duration:
+                    track_info["duration"] = float(duration)
+
+                artist = tags.get("artist") or tags.get("album_artist")
                 if artist:
                     track_info["artist"] = artist
-                
-                duration = data.get("duration")
-                if duration:
-                    track_info["duration"] = duration
-                
-                thumbnail_url = data.get("thumbnail")
-                if thumbnail_url:
-                    req = urllib.request.Request(thumbnail_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=5) as resp:
-                        track_info["image_bytes"] = resp.read()
-                
-                self._report("Metadata loaded")
+
+                album = tags.get("album")
+                if album:
+                    track_info["album"] = album
+
+            # Try to extract embedded cover art
+            cover_cmd = [
+                ffprobe if ffprobe else "ffprobe",
+                "-v", "quiet", file_path,
+            ]
+            # Use ffmpeg to extract cover
+            ffmpeg = shutil.which("ffmpeg")
+            if ffmpeg:
+                tmp_cover = os.path.join(tempfile.gettempdir(), "utune_cover.jpg")
+                extract_cmd = [
+                    ffmpeg, "-y", "-i", file_path,
+                    "-an", "-vcodec", "mjpeg", "-frames:v", "1",
+                    tmp_cover,
+                ]
+                cover_proc = subprocess.run(
+                    extract_cmd, capture_output=True,
+                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                )
+                if cover_proc.returncode == 0 and os.path.isfile(tmp_cover):
+                    with open(tmp_cover, "rb") as f:
+                        cover_data = f.read()
+                    if len(cover_data) > 100:  # sanity check
+                        track_info["image_bytes"] = cover_data
+                    try:
+                        os.remove(tmp_cover)
+                    except OSError:
+                        pass
+
+            self._report("Metadata loaded")
         except Exception as e:
-            print("[Player] Metadata fetch error:", e)
+            print("[Player] Local metadata error:", e)
+
+
 
     def _cleanup(self):
         with self.lock:
             self.is_playing = False
             self.current_track = None
-            self.ytdlp_process = None
             self.mpv_process = None
             self.play_start_time = None
 
@@ -211,24 +231,12 @@ class Player:
                 except Exception:
                     pass
                     
-            if self.ytdlp_process:
-                try:
-                    self.ytdlp_process.terminate()
-                except Exception:
-                    pass
-                    
             # Try to kill if terminate doesn't work quickly
             if self.mpv_process:
                 try:
                     self.mpv_process.wait(timeout=1)
                 except subprocess.TimeoutExpired:
                     self.mpv_process.kill()
-                    
-            if self.ytdlp_process:
-                try:
-                    self.ytdlp_process.wait(timeout=1)
-                except subprocess.TimeoutExpired:
-                    self.ytdlp_process.kill()
 
     def skip(self):
         self._report("Skipping...")

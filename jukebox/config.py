@@ -43,6 +43,13 @@ class Config:
         return self.config.get("player", {}).get("ytdlp_format", "bestaudio/best")
 
     @property
+    def music_folder(self):
+        path = self.config.get("player", {}).get("music_folder", "music")
+        if not os.path.isabs(path):
+            path = os.path.join(os.path.dirname(__file__), path)
+        return path
+
+    @property
     def ytdlp_cookies_browser(self):
         return self.config.get("player", {}).get("cookies_from_browser", "")
 

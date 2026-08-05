@@ -25,6 +25,13 @@ class RFIDReader:
 
     def stop(self):
         self.running = False
+        # Close stdin to unblock the blocking input() call in keyboard mode
+        if self.mode == "keyboard":
+            try:
+                import sys
+                sys.stdin.close()
+            except Exception:
+                pass
 
     def _process_uid(self, uid):
         now = time.time()
@@ -45,7 +52,7 @@ class RFIDReader:
                 uid = input().strip()
                 if uid and self.running:
                     self._process_uid(uid)
-            except EOFError:
+            except (EOFError, ValueError):
                 break
             except Exception as e:
                 if self.running:

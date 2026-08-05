@@ -43,6 +43,13 @@ class Registry:
             ''', (uid, title, url, datetime.now()))
             conn.commit()
 
+    def delete_card(self, uid):
+        """Removes a card from the registry."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM cards WHERE uid = ?', (uid,))
+            conn.commit()
+
 if __name__ == '__main__':
     # Simple manual test
     r = Registry("test.db")

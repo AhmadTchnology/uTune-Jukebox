@@ -18,7 +18,7 @@ def main():
     print("Starting RFID Jukebox...")
     registry = Registry(config.db_path)
     queue_mgr = JukeboxQueue()
-    player = Player(mpv_path=config.mpv_path, ytdlp_format=config.ytdlp_format)
+    player = Player(mpv_path=config.mpv_path)
     
     def on_rfid_scan(uid):
         print(f"Scanned UID: {uid}")
