@@ -89,6 +89,14 @@ class UI:
         self.new_card_time = 0
         self.new_card_duration = 600  # ms
 
+        # Drag and drop state
+        self.dragging_idx = None
+        self.drag_start_y = 0
+        self.drag_offset_y = 0
+        self.mouse_x = 0
+        self.mouse_y = 0
+        self.queue_rects = []
+
         # Cached album art
         self._cached_art_title = None
         self._cached_art_surface = None
@@ -205,6 +213,41 @@ class UI:
                         if self._key_buffer and self.on_scan:
                             self.on_scan(self._key_buffer)
                         self._key_buffer = ""
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        # Check queue rects
+                        for i, rect in self.queue_rects:
+                            if rect.collidepoint(event.pos):
+                                self.dragging_idx = i
+                                self.drag_offset_y = event.pos[1] - rect.y
+                                self.drag_start_y = rect.y
+                                break
+                elif event.type == pygame.MOUSEBUTTONUP:
+                    if event.button == 1 and self.dragging_idx is not None:
+                        upcoming = self.queue_mgr.get_upcoming()
+                        max_visible = min(len(upcoming), 5)
+                        
+                        drop_idx = self.dragging_idx
+                        for i, rect in self.queue_rects:
+                            if event.pos[1] < rect.centery:
+                                drop_idx = i
+                                break
+                        else:
+                            # Dropped below all visible rects
+                            drop_idx = max_visible
+
+                        if drop_idx != self.dragging_idx:
+                            target_idx = drop_idx
+                            if drop_idx > self.dragging_idx:
+                                target_idx -= 1
+                            
+                            # Bound target_idx
+                            target_idx = max(0, min(target_idx, len(upcoming) - 1))
+                            self.queue_mgr.reorder(self.dragging_idx, target_idx)
+                            
+                        self.dragging_idx = None
+                elif event.type == pygame.MOUSEMOTION:
+                    self.mouse_x, self.mouse_y = event.pos
 
             self._update(dt)
             self._draw()
@@ -615,6 +658,47 @@ class UI:
         iy = y + 24
 
         now = pygame.time.get_ticks()
+        self.queue_rects = []
+
+        # Helper to draw a single card
+        def draw_card(item_index, item_data, cx, cy, cw, ch, is_next, is_new, alpha):
+            card_surf = pygame.Surface((cw, ch), pygame.SRCALPHA)
+            pygame.draw.rect(card_surf, (*Colors.GLASS_BG, 115), card_surf.get_rect(), border_radius=10)
+            
+            border_color = Colors.GLASS_BORDER_NEXT if is_next else Colors.GLASS_BORDER
+            border_alpha = 96 if is_next else 50
+            pygame.draw.rect(card_surf, (*border_color, border_alpha), card_surf.get_rect(), width=1, border_radius=10)
+
+            if is_next:
+                highlight = pygame.Surface((cw, 1), pygame.SRCALPHA)
+                for hx in range(cw):
+                    t = hx / cw
+                    a = int(128 * math.sin(t * math.pi))
+                    highlight.set_at((hx, 0), (*Colors.CYAN, a))
+                card_surf.blit(highlight, (0, 0))
+
+            card_surf.set_alpha(alpha)
+            self.screen.blit(card_surf, (cx, cy))
+
+            thumb_size = 48 if is_next else 38
+            thumb_x = cx + 12
+            thumb_y = cy + (ch - thumb_size) // 2
+            self._draw_mini_album(thumb_x, thumb_y, thumb_size, item_data, item_index)
+
+            title = item_data.get("title", "Unknown")
+            if len(title) > 22:
+                title = title[:19] + "..."
+            title_surf = self.font_card_title.render(title, True, Colors.TEXT_SLATE)
+            title_surf.set_alpha(alpha)
+            text_x = thumb_x + thumb_size + 10
+            text_y = cy + (ch // 2) - title_surf.get_height() + 2
+            self.screen.blit(title_surf, (text_x, text_y))
+
+            artist = item_data.get("artist", "")
+            if artist:
+                artist_surf = self.font_card_artist.render(artist, True, Colors.TEXT_DIM_CARD)
+                artist_surf.set_alpha(alpha)
+                self.screen.blit(artist_surf, (text_x, text_y + title_surf.get_height() + 2))
 
         for i in range(max_visible):
             item = upcoming[i]
@@ -622,10 +706,9 @@ class UI:
             is_new = (i == 0 and now - self.new_card_time < self.new_card_duration)
             card_h = card_h_next if is_next else card_h_normal
 
-            # Slide-in animation for new cards
             slide_offset = 0
             card_alpha = 255
-            if is_new:
+            if is_new and self.dragging_idx is None:
                 progress = (now - self.new_card_time) / self.new_card_duration
                 if progress < 0.6:
                     slide_offset = int(60 * (1 - progress / 0.6))
@@ -634,59 +717,34 @@ class UI:
                     slide_offset = int(-4 * (1 - (progress - 0.6) / 0.4))
 
             card_x = x + slide_offset
-            card_rect = pygame.Rect(card_x, iy, w - abs(slide_offset), card_h)
+            card_w = w - abs(slide_offset)
+            card_rect = pygame.Rect(card_x, iy, card_w, card_h)
+            self.queue_rects.append((i, card_rect))
 
-            # Glass card background
-            card_surf = pygame.Surface((card_rect.width, card_h), pygame.SRCALPHA)
-            pygame.draw.rect(
-                card_surf, (*Colors.GLASS_BG, 115),
-                card_surf.get_rect(), border_radius=10,
-            )
-
-            # Border
-            border_color = Colors.GLASS_BORDER_NEXT if is_next else Colors.GLASS_BORDER
-            border_alpha = 96 if is_next else 50
-            pygame.draw.rect(
-                card_surf, (*border_color, border_alpha),
-                card_surf.get_rect(), width=1, border_radius=10,
-            )
-
-            # Top edge highlight for "next" card
-            if is_next:
-                highlight = pygame.Surface((card_rect.width, 1), pygame.SRCALPHA)
-                for hx in range(card_rect.width):
-                    t = hx / card_rect.width
-                    a = int(128 * math.sin(t * math.pi))
-                    highlight.set_at((hx, 0), (*Colors.CYAN, a))
-                card_surf.blit(highlight, (0, 0))
-
-            card_surf.set_alpha(card_alpha)
-            self.screen.blit(card_surf, card_rect.topleft)
-
-            # Mini album art placeholder
-            thumb_size = 48 if is_next else 38
-            thumb_x = card_x + 12
-            thumb_y = iy + (card_h - thumb_size) // 2
-            self._draw_mini_album(thumb_x, thumb_y, thumb_size, item, i)
-
-            # Track title
-            title = item.get("title", "Unknown")
-            if len(title) > 22:
-                title = title[:19] + "..."
-            title_surf = self.font_card_title.render(title, True, Colors.TEXT_SLATE)
-            title_surf.set_alpha(card_alpha)
-            text_x = thumb_x + thumb_size + 10
-            text_y = iy + (card_h // 2) - title_surf.get_height() + 2
-            self.screen.blit(title_surf, (text_x, text_y))
-
-            # Artist
-            artist = item.get("artist", "")
-            if artist:
-                artist_surf = self.font_card_artist.render(artist, True, Colors.TEXT_DIM_CARD)
-                artist_surf.set_alpha(card_alpha)
-                self.screen.blit(artist_surf, (text_x, text_y + title_surf.get_height() + 2))
+            if i == self.dragging_idx:
+                # Draw placeholder gap
+                placeholder = pygame.Surface((card_w, card_h), pygame.SRCALPHA)
+                pygame.draw.rect(placeholder, (255, 255, 255, 10), placeholder.get_rect(), border_radius=10)
+                pygame.draw.rect(placeholder, (255, 255, 255, 30), placeholder.get_rect(), width=1, border_radius=10)
+                self.screen.blit(placeholder, (card_x, iy))
+            else:
+                draw_card(i, item, card_x, iy, card_w, card_h, is_next, is_new, card_alpha)
 
             iy += card_h + gap
+
+        # Draw the dragged item on top
+        if self.dragging_idx is not None and self.dragging_idx < len(upcoming):
+            item = upcoming[self.dragging_idx]
+            is_next = (self.dragging_idx == 0)
+            card_h = card_h_next if is_next else card_h_normal
+            drag_y = self.mouse_y - self.drag_offset_y
+            
+            # Add a slight drop shadow for the dragged item
+            shadow = pygame.Surface((w, card_h), pygame.SRCALPHA)
+            pygame.draw.rect(shadow, (0, 0, 0, 100), shadow.get_rect(), border_radius=10)
+            self.screen.blit(shadow, (x + 4, drag_y + 4))
+            
+            draw_card(self.dragging_idx, item, x, drag_y, w, card_h, is_next, False, 255)
 
         if len(upcoming) > max_visible:
             more = len(upcoming) - max_visible

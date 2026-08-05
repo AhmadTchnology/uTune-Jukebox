@@ -148,3 +148,23 @@ class JukeboxQueue:
                 except queue.Empty:
                     break
             self._items.clear()
+
+    def reorder(self, from_idx, to_idx):
+        """Move an item from from_idx to to_idx in the upcoming list."""
+        with self._lock:
+            if from_idx < 0 or from_idx >= len(self._items):
+                return
+            if to_idx < 0 or to_idx >= len(self._items):
+                return
+            if from_idx == to_idx:
+                return
+            item = self._items.pop(from_idx)
+            self._items.insert(to_idx, item)
+            # Rebuild the internal queue to match the new order
+            while not self._q.empty():
+                try:
+                    self._q.get_nowait()
+                except queue.Empty:
+                    break
+            for it in self._items:
+                self._q.put(it)
