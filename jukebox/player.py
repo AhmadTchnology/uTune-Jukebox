@@ -45,6 +45,9 @@ class Player:
         title = track_info["title"] if track_info else "Unknown"
         self._report(f"Loading: {title}")
 
+        if track_info:
+            threading.Thread(target=self._fetch_metadata_bg, args=(url, track_info), daemon=True).start()
+
         ytdlp = self._find_ytdlp()
         ytdlp_cmd = [
             ytdlp, 
@@ -133,6 +136,40 @@ class Player:
         finally:
             err_file_yt.close()
             self._cleanup()
+
+    def _fetch_metadata_bg(self, url, track_info):
+        import json
+        import urllib.request
+        try:
+            ytdlp = self._find_ytdlp()
+            cmd = [ytdlp, "--dump-json", "--no-playlist", url]
+            from config import config
+            cookies_file = getattr(config, "ytdlp_cookies_file", None)
+            cookies_browser = getattr(config, "ytdlp_cookies_browser", None)
+            if cookies_file and os.path.exists(cookies_file):
+                cmd.extend(["--cookies", cookies_file])
+            elif cookies_browser:
+                cmd.extend(["--cookies-from-browser", cookies_browser])
+
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            )
+            if proc.returncode == 0:
+                data = json.loads(proc.stdout)
+                artist = data.get("artist") or data.get("uploader") or data.get("channel")
+                if artist:
+                    track_info["artist"] = artist
+                
+                thumbnail_url = data.get("thumbnail")
+                if thumbnail_url:
+                    req = urllib.request.Request(thumbnail_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        track_info["image_bytes"] = resp.read()
+                
+                self._report("Metadata loaded")
+        except Exception as e:
+            print("[Player] Metadata fetch error:", e)
 
     def _cleanup(self):
         with self.lock:

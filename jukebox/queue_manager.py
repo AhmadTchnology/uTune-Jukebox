@@ -21,7 +21,50 @@ class JukeboxQueue:
             item = {'uid': uid, 'title': title, 'youtube_url': youtube_url}
             self._items.append(item)
             self._q.put(item)
+            
+            # Start async metadata fetch for the queue item
+            threading.Thread(target=self._fetch_metadata_bg, args=(item,), daemon=True).start()
             return True
+
+    def _fetch_metadata_bg(self, item):
+        import json
+        import urllib.request
+        import subprocess
+        import shutil
+        import os
+        try:
+            ytdlp = shutil.which("yt-dlp") or "yt-dlp"
+            cmd = [ytdlp, "--dump-json", "--no-playlist", item['youtube_url']]
+            
+            # Use cookies if available
+            try:
+                from config import config
+                cookies_file = getattr(config, "ytdlp_cookies_file", None)
+                cookies_browser = getattr(config, "ytdlp_cookies_browser", None)
+                if cookies_file and os.path.exists(cookies_file):
+                    cmd.extend(["--cookies", cookies_file])
+                elif cookies_browser:
+                    cmd.extend(["--cookies-from-browser", cookies_browser])
+            except ImportError:
+                pass
+
+            proc = subprocess.run(
+                cmd, capture_output=True, text=True,
+                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+            )
+            if proc.returncode == 0:
+                data = json.loads(proc.stdout)
+                artist = data.get("artist") or data.get("uploader") or data.get("channel")
+                if artist:
+                    item['artist'] = artist
+                
+                thumbnail_url = data.get("thumbnail")
+                if thumbnail_url:
+                    req = urllib.request.Request(thumbnail_url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=5) as resp:
+                        item["image_bytes"] = resp.read()
+        except Exception as e:
+            print("[Queue] Metadata fetch error:", e)
 
     def dequeue(self):
         """Blocks until a track is available, returns it."""
