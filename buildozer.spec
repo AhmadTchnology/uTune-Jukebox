@@ -20,8 +20,8 @@ requirements = python3,kivy,pyjnius,pyyaml,yt-dlp,sqlite3,pillow
 # Android permissions
 android.permissions = INTERNET, NFC
 
-# Android API levels (Android 11 = API 30)
-android.api = 30
+# Android API levels (Android 11 is API 30, but we compile against 33 for modern SDL2 compat)
+android.api = 33
 android.minapi = 21
 android.ndk = 25b
 
