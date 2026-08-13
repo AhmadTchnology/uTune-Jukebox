@@ -40,7 +40,7 @@ class JukeboxApp(App):
             if card:
                 # Check what's currently playing to avoid enqueuing the exact same thing
                 curr = self.player.current_track['uid'] if self.player.current_track else None
-                success = self.queue_mgr.enqueue(uid, card['title'], card['youtube_url'], currently_playing_uid=curr)
+                success = self.queue_mgr.enqueue(uid, card['title'], card['file_path'], currently_playing_uid=curr)
                 if success:
                     self.ui.show_toast(f"Added: {card['title']}", 2.0)
                 else:
@@ -64,7 +64,7 @@ class JukeboxApp(App):
                 if item is None:
                     break
                 # Only pass URL/Path to play
-                self.player.play(item['youtube_url'], track_info=item)
+                self.player.play(item['file_path'], track_info=item)
 
         self.worker_thread = threading.Thread(target=player_worker, daemon=True)
         self.worker_thread.start()

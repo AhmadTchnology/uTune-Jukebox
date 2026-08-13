@@ -1,13 +1,7 @@
 import queue
 import threading
 import json
-import subprocess
-import shutil
 import os
-import tempfile
-
-from platform_utils import get_subprocess_flags
-
 
 class JukeboxQueue:
     def __init__(self):
@@ -15,7 +9,7 @@ class JukeboxQueue:
         self._items = []
         self._lock = threading.Lock()
 
-    def enqueue(self, uid, title, youtube_url, currently_playing_uid=None):
+    def enqueue(self, uid, title, file_path, currently_playing_uid=None):
         """Enqueues a song if it's not already in the queue or playing."""
         with self._lock:
             if currently_playing_uid == uid:
@@ -25,7 +19,7 @@ class JukeboxQueue:
                 if item["uid"] == uid:
                     return False
 
-            item = {"uid": uid, "title": title, "youtube_url": youtube_url}
+            item = {"uid": uid, "title": title, "file_path": file_path}
             self._items.append(item)
             self._q.put(item)
 
@@ -39,7 +33,7 @@ class JukeboxQueue:
         try:
             from config import config
 
-            file_path = item["youtube_url"]
+            file_path = item["file_path"]
             if not os.path.isabs(file_path):
                 file_path = os.path.join(config.music_folder, file_path)
 
@@ -69,60 +63,6 @@ class JukeboxQueue:
                     except Exception:
                         pass
 
-            ffprobe = shutil.which("ffprobe")
-            if not ffprobe:
-                return
-
-            cmd = [
-                ffprobe, "-v", "quiet",
-                "-print_format", "json",
-                "-show_format", "-show_streams",
-                file_path,
-            ]
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True,
-                **get_subprocess_flags(),
-            )
-            if proc.returncode == 0:
-                data = json.loads(proc.stdout)
-                fmt = data.get("format", {})
-                tags_raw = fmt.get("tags", {})
-                tags = {k.lower(): v for k, v in tags_raw.items()}
-
-                duration = fmt.get("duration")
-                if duration:
-                    item["duration"] = float(duration)
-
-                artist = tags.get("artist") or tags.get("album_artist")
-                if artist:
-                    item["artist"] = artist
-
-                title = tags.get("title")
-                if title:
-                    item["title"] = title
-
-            # Extract embedded cover art
-            ffmpeg = shutil.which("ffmpeg")
-            if ffmpeg and "image_bytes" not in item:
-                tmp_cover = os.path.join(tempfile.gettempdir(), f"utune_q_{id(item)}.jpg")
-                extract_cmd = [
-                    ffmpeg, "-y", "-i", file_path,
-                    "-an", "-vcodec", "mjpeg", "-frames:v", "1",
-                    tmp_cover,
-                ]
-                cover_proc = subprocess.run(
-                    extract_cmd, capture_output=True,
-                    **get_subprocess_flags(),
-                )
-                if cover_proc.returncode == 0 and os.path.isfile(tmp_cover):
-                    with open(tmp_cover, "rb") as f:
-                        cover_data = f.read()
-                    if len(cover_data) > 100:
-                        item["image_bytes"] = cover_data
-                    try:
-                        os.remove(tmp_cover)
-                    except OSError:
-                        pass
         except Exception as e:
             print("[Queue] Local metadata error:", e)
 

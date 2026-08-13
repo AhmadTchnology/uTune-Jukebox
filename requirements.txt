@@ -1,9 +1,6 @@
 # UI Framework
 kivy
 
-# Audio/Video handling
-yt-dlp
-
 # Configuration parsing
 pyyaml
 

@@ -189,7 +189,7 @@ class Player:
         self._cleanup()
 
     def _fetch_local_metadata(self, file_path, track_info):
-        """Extract duration and album art from local audio files."""
+        """Extract duration and album art from local audio files (.info.json)."""
         try:
             import json
 
@@ -217,60 +217,6 @@ class Player:
                             track_info["image_bytes"] = f.read()
                         break
                     except Exception:
-                        pass
-
-            ffprobe = shutil.which("ffprobe")
-            if not ffprobe:
-                return
-
-            cmd = [
-                ffprobe, "-v", "quiet",
-                "-print_format", "json",
-                "-show_format", "-show_streams",
-                file_path,
-            ]
-            proc = subprocess.run(
-                cmd, capture_output=True, text=True,
-                **get_subprocess_flags(),
-            )
-            if proc.returncode == 0:
-                data = json.loads(proc.stdout)
-                fmt = data.get("format", {})
-                tags = {k.lower(): v for k, v in fmt.get("tags", {}).items()}
-
-                duration = fmt.get("duration")
-                if duration:
-                    track_info["duration"] = float(duration)
-
-                artist = tags.get("artist") or tags.get("album_artist")
-                if artist:
-                    track_info["artist"] = artist
-
-                album = tags.get("album")
-                if album:
-                    track_info["album"] = album
-
-            # Extract embedded cover art
-            ffmpeg = shutil.which("ffmpeg")
-            if ffmpeg and "image_bytes" not in track_info:
-                tmp_cover = os.path.join(tempfile.gettempdir(), "utune_cover.jpg")
-                extract_cmd = [
-                    ffmpeg, "-y", "-i", file_path,
-                    "-an", "-vcodec", "mjpeg", "-frames:v", "1",
-                    tmp_cover,
-                ]
-                cover_proc = subprocess.run(
-                    extract_cmd, capture_output=True,
-                    **get_subprocess_flags(),
-                )
-                if cover_proc.returncode == 0 and os.path.isfile(tmp_cover):
-                    with open(tmp_cover, "rb") as f:
-                        cover_data = f.read()
-                    if len(cover_data) > 100:
-                        track_info["image_bytes"] = cover_data
-                    try:
-                        os.remove(tmp_cover)
-                    except OSError:
                         pass
 
             self._report("Metadata loaded")

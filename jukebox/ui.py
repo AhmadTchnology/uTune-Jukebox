@@ -260,7 +260,9 @@ class UI(FloatLayout):
                 from registry import Registry
                 r = Registry(self.config.db_path)
                 self.existing_card = r.get_card(self.scanned_uid)
-                self.reg_state = REG_STATE_PICK_SOURCE
+                self.selected_source = "local"
+                self._scan_local_files()
+                self.reg_state = REG_STATE_PICK_FILE
         self.dirty = True
 
     # ── keyboard (RFID via USB OTG keyboard emulation) ───────────────────────
@@ -308,33 +310,13 @@ class UI(FloatLayout):
 
             if self.reg_state == REG_STATE_WAITING_SCAN:
                 if key in (13, 271) and self._key_buffer.strip():
-                    if self.on_scan:
-                        self.on_scan(self._key_buffer.strip())
+                    self.handle_scan(self._key_buffer.strip())
                     self._key_buffer = ""
                 elif codepoint and codepoint.isdigit():
                     self._key_buffer += codepoint
                 return True
 
-            if self.reg_state == REG_STATE_PICK_SOURCE:
-                if codepoint == "1":
-                    self.selected_source = "youtube"
-                    self.reg_state = REG_STATE_INPUT_URL
-                    self._show_text_input("Enter YouTube URL:")
-                elif codepoint == "2":
-                    self.selected_source = "local"
-                    self._scan_local_files()
-                    self.reg_state = REG_STATE_PICK_FILE
-                return True
 
-            if self.reg_state == REG_STATE_INPUT_URL:
-                if key in (13, 271):
-                    text = self._get_input_text()
-                    if text.strip():
-                        url = text.strip()
-                        self._remove_text_input()
-                        self.reg_state = REG_STATE_DOWNLOADING
-                        threading.Thread(target=self._download_youtube, args=(url,), daemon=True).start()
-                return True
 
             if self.reg_state == REG_STATE_PICK_FILE:
                 if key == 273 and self.file_selected > 0:  # UP
@@ -435,13 +417,13 @@ class UI(FloatLayout):
                 divider_x = w - right_w - pad
                 left_w = divider_x - pad
                 
-                self._draw_now_playing(pad, bar_h, left_w, h - bar_h)
+                self._draw_now_playing(pad, bar_h, left_w, h)
                 
                 # Vertical Divider
                 Color(1, 1, 1, 0.08)
                 Rectangle(pos=(divider_x, bar_h + pad), size=(1, h - bar_h - pad*2))
                 
-                self._draw_queue(divider_x + pad, bar_h, right_w - pad, h - bar_h)
+                self._draw_queue(divider_x + pad, bar_h, right_w - pad, h)
                 
                 # Bottom bar
                 self._draw_bottom_bar(w, bar_h)
@@ -451,12 +433,6 @@ class UI(FloatLayout):
                     self._draw_reg_home(w, h)
                 elif self.reg_state == REG_STATE_WAITING_SCAN:
                     self._draw_reg_waiting_scan(w, h)
-                elif self.reg_state == REG_STATE_PICK_SOURCE:
-                    self._draw_reg_pick_source(w, h)
-                elif self.reg_state == REG_STATE_INPUT_URL:
-                    self._draw_reg_input_screen(w, h, "Enter YouTube URL:")
-                elif self.reg_state == REG_STATE_DOWNLOADING:
-                    self._draw_reg_downloading(w, h)
                 elif self.reg_state == REG_STATE_PICK_FILE:
                     self._draw_reg_pick_file(w, h)
                 elif self.reg_state == REG_STATE_INPUT_TITLE:
@@ -510,7 +486,7 @@ class UI(FloatLayout):
 
     def _draw_playing(self, x, top_y, w, h, track):
         # Scale album art nicely in the available space
-        max_art = int(dp(320))
+        max_art = int(dp(480))
         art_size = min(max_art, int(w * 0.4))
         
         # Center vertically if plenty of space
@@ -532,7 +508,7 @@ class UI(FloatLayout):
         # Vertically align info with the art
         info_top = art_y + art_size - int(dp(16))
         
-        self._text(title, info_x, info_top, font_size=sp(36), color=C.TEXT, bold=True)
+        self._text(title, info_x, info_top, font_size=sp(28), color=C.TEXT, bold=True)
         
         artist = track.get("artist", "Unknown Artist")
         self._text(artist, info_x, info_top - int(dp(40)), font_size=sp(22), color=C.TEXT_SEC)
@@ -544,7 +520,7 @@ class UI(FloatLayout):
             offset += int(dp(24))
 
         # Progress bar
-        prog_w = min(info_w - int(dp(16)), int(dp(400)))
+        prog_w = info_w - int(dp(16))
         self._draw_progress_bar(info_x, art_y + int(dp(16)), prog_w)
 
     def _draw_album_art(self, x, y, size, track):
@@ -887,19 +863,7 @@ class UI(FloatLayout):
                 self.reg_state = REG_STATE_LIST
                 return True
 
-        elif self.reg_state == REG_STATE_PICK_SOURCE:
-            if self._hit_btn(cx, cy - int(dp(20)), int(dp(360)), int(dp(60)), mx, my):
-                self.selected_source = "youtube"
-                self.reg_state = REG_STATE_INPUT_URL
-                self._show_text_input("Enter YouTube URL:")
-                return True
-            if self._hit_btn(cx, cy - int(dp(100)), int(dp(360)), int(dp(60)), mx, my):
-                self.selected_source = "local"
-                self._scan_local_files()
-                self.reg_state = REG_STATE_PICK_FILE
-                return True
-
-        elif self.reg_state in (REG_STATE_INPUT_URL, REG_STATE_INPUT_TITLE):
+        elif self.reg_state == REG_STATE_INPUT_TITLE:
             btn_y = cy - int(dp(100))
             if self._hit_btn(cx, btn_y, int(dp(240)), int(dp(54)), mx, my):
                 self._submit_text_input()
@@ -1006,12 +970,7 @@ class UI(FloatLayout):
         text = self._get_input_text()
         if not text.strip():
             return
-        if self.reg_state == REG_STATE_INPUT_URL:
-            url = text.strip()
-            self._remove_text_input()
-            self.reg_state = REG_STATE_DOWNLOADING
-            threading.Thread(target=self._download_youtube, args=(url,), daemon=True).start()
-        elif self.reg_state == REG_STATE_INPUT_TITLE:
+        if self.reg_state == REG_STATE_INPUT_TITLE:
             self.reg_title = text.strip()
             self._remove_text_input()
             self.reg_state = REG_STATE_CONFIRM
@@ -1063,34 +1022,11 @@ class UI(FloatLayout):
         self._text("Scan RFID Card", cx - int(dp(120)), cy - radius - int(dp(60)), font_size=sp(36), color=C.TEXT, bold=True)
         self._text("Place card on the reader...", cx - int(dp(140)), cy - radius - int(dp(100)), font_size=sp(24), color=C.TEXT_MUTED)
 
-    def _draw_reg_pick_source(self, w, h):
-        cx, cy = w // 2, h // 2
-        self._text(f"Card UID: {self.scanned_uid}", cx - int(dp(110)), cy + int(dp(160)), font_size=sp(24), color=C.CYAN)
-        if self.existing_card:
-            self._text(f"Already registered: {self.existing_card['title']}", cx - int(dp(180)), cy + int(dp(120)), font_size=sp(24), color=C.ORANGE)
-            self._text("Continuing will overwrite", cx - int(dp(120)), cy + int(dp(90)), font_size=sp(20), color=C.TEXT_MUTED)
-        self._text("Choose Audio Source", cx - int(dp(160)), cy + int(dp(60)), font_size=sp(32), color=C.TEXT, bold=True)
-        self._draw_reg_button(cx, cy - int(dp(20)), int(dp(360)), int(dp(60)), "[1] YouTube URL", C.CYAN)
-        self._draw_reg_button(cx, cy - int(dp(100)), int(dp(360)), int(dp(60)), "[2] Local File", C.VIOLET)
-
     def _draw_reg_input_screen(self, w, h, label):
         cx, cy = w // 2, h // 2
         self._text(label, cx - int(dp(150)), cy + int(dp(100)), font_size=sp(36), color=C.TEXT, bold=True)
         self._text("Type below, then tap Submit or press ENTER", cx - int(dp(220)), cy + int(dp(60)), font_size=sp(22), color=C.TEXT_MUTED)
         self._draw_reg_button(cx, cy - int(dp(100)), int(dp(240)), int(dp(54)), "Submit", C.CYAN)
-
-    def _draw_reg_downloading(self, w, h):
-        cx, cy = w // 2, h // 2
-        radius = int(dp(50))
-        for i in range(24):
-            a = (self.pulse_phase * 4 + (math.pi * 2 * i / 24)) % (math.pi * 2)
-            sx = cx + int(radius * math.cos(a))
-            sy = cy + int(dp(40)) + int(radius * math.sin(a))
-            dot_a = 0.2 + 0.8 * (i / 24)
-            Color(*C.CYAN[:3], dot_a)
-            Ellipse(pos=(sx - int(dp(5)), sy - int(dp(5))), size=(int(dp(10)), int(dp(10))))
-        self._text("Downloading Audio...", cx - int(dp(150)), cy - int(dp(50)), font_size=sp(32), color=C.TEXT, bold=True)
-        self._text(self.download_progress, cx - int(dp(180)), cy - int(dp(90)), font_size=sp(22), color=C.TEXT_SEC)
 
     def _draw_reg_pick_file(self, w, h):
         cx, cy = w // 2, h // 2
@@ -1231,7 +1167,7 @@ class UI(FloatLayout):
         try:
             with sqlite3.connect(self.config.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT uid, title, youtube_url FROM cards ORDER BY date_added DESC")
+                cursor.execute("SELECT uid, title, file_path FROM cards ORDER BY date_added DESC")
                 self.cards_list = [
                     {"uid": r[0], "title": r[1], "url": r[2]} for r in cursor.fetchall()
                 ]
@@ -1249,8 +1185,6 @@ class UI(FloatLayout):
             return 0
 
     def _get_title_from_file(self, filename):
-        import subprocess
-        import shutil
         import json
 
         file_path = os.path.join(self.config.music_folder, filename)
@@ -1268,116 +1202,4 @@ class UI(FloatLayout):
                     return title
             except Exception:
                 pass
-
-        ffprobe = shutil.which("ffprobe")
-        if not ffprobe:
-            return None
-        cmd = [ffprobe, "-v", "quiet", "-print_format", "json", "-show_format", file_path]
-        try:
-            proc = subprocess.run(cmd, capture_output=True, text=True, **get_subprocess_flags())
-            if proc.returncode == 0:
-                data = json.loads(proc.stdout)
-                tags = {k.lower(): v for k, v in data.get("format", {}).get("tags", {}).items()}
-                title = tags.get("title")
-                artist = tags.get("artist")
-                if title and artist:
-                    return f"{artist} - {title}"
-                elif title:
-                    return title
-        except Exception:
-            pass
         return None
-
-    def _download_youtube(self, url):
-        import yt_dlp
-        import re
-
-        url = url.strip().strip('"').strip("'").strip()
-        url = re.sub(r'[\u200b\u200c\u200d\ufeff\u00a0]', '', url)
-        if url and not url.startswith(('http://', 'https://')):
-            url = 'https://' + url
-
-        self.download_progress = "Starting download..."
-        self.dirty = True
-        music_dir = self.config.music_folder
-        os.makedirs(music_dir, exist_ok=True)
-        before = set(os.listdir(music_dir))
-
-        def progress_hook(d):
-            if d['status'] == 'downloading':
-                pct = d.get('_percent_str', '').strip()
-                eta = d.get('_eta_str', '').strip()
-                self.download_progress = f"Downloading... {pct} (ETA: {eta})"
-                self.dirty = True
-            elif d['status'] == 'finished':
-                self.download_progress = "Download complete, processing..."
-                self.dirty = True
-
-        class Logger:
-            def __init__(self, parent):
-                self.parent = parent
-            def debug(self, msg): pass
-            def info(self, msg):
-                if not msg.startswith('[download]'):
-                    self.parent.download_progress = "Fetching metadata..."
-                    self.parent.dirty = True
-            def warning(self, msg): pass
-            def error(self, msg): pass
-
-        ydl_opts = {
-            'format': 'bestaudio/best',
-            'noplaylist': True,
-            'writethumbnail': True,
-            'writeinfojson': True,
-            'outtmpl': os.path.join(music_dir, '%(title)s.%(ext)s'),
-            'logger': Logger(self),
-            'progress_hooks': [progress_hook],
-            'noprogress': True,
-            'quiet': True,
-        }
-
-        cookies_file = self.config.ytdlp_cookies_file
-        cookies_browser = self.config.ytdlp_cookies_browser
-        if cookies_file and os.path.exists(cookies_file):
-            ydl_opts['cookiefile'] = cookies_file
-        elif cookies_browser:
-            ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
-
-        try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
-
-            after = set(os.listdir(music_dir))
-            new_files = after - before
-            audio_exts = {".webm", ".mp3", ".m4a", ".opus", ".ogg", ".wav", ".flac", ".aac", ".wma", ".mp4"}
-            audio_file = None
-            for f in new_files:
-                if os.path.splitext(f)[1].lower() in audio_exts:
-                    audio_file = f
-                    break
-
-            if not audio_file:
-                candidates = []
-                for f in os.listdir(music_dir):
-                    if os.path.splitext(f)[1].lower() in audio_exts:
-                        full = os.path.join(music_dir, f)
-                        candidates.append((os.path.getmtime(full), f))
-                if candidates:
-                    candidates.sort(reverse=True)
-                    audio_file = candidates[0][1]
-
-            if audio_file:
-                self.reg_url = audio_file
-                title = self._get_title_from_file(audio_file)
-                preset = title if title else os.path.splitext(audio_file)[0]
-                self.reg_state = REG_STATE_INPUT_TITLE
-                Clock.schedule_once(lambda dt: self._show_text_input("Enter Song Title:", preset), 0)
-            else:
-                self.toast_message = "Download failed — no audio file found."
-                self.toast_end = _time.time() + 3
-                self.reg_state = REG_STATE_PICK_SOURCE
-        except Exception as e:
-            self.toast_message = f"Error: {e}"
-            self.toast_end = _time.time() + 3
-            self.reg_state = REG_STATE_PICK_SOURCE
-        self.dirty = True
