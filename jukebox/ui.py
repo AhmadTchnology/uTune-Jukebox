@@ -106,7 +106,11 @@ class TextCache:
             self.cache.move_to_end(key)
             return self.cache[key]
         
-        cl = CoreLabel(text=str(text), font_size=font_size, bold=bold, color=color)
+        font_name = 'jukebox/NotoSans-Bold.ttf' if bold else 'jukebox/NotoSans-Regular.ttf'
+        if not os.path.exists(font_name):
+            font_name = 'Roboto' # fallback
+            
+        cl = CoreLabel(text=str(text), font_size=font_size, bold=bold, color=color, font_name=font_name)
         cl.refresh()
         tex = cl.texture
         self.cache[key] = tex
@@ -503,12 +507,15 @@ class UI(FloatLayout):
 
         title = track.get("title", "Unknown Track")
         
+        # Calculate dynamic max chars based on available width
+        max_chars = max(28, int(info_w / sp(18)))
+        
         # word wrap title manually
         words = title.split(' ')
         lines = []
         cur_line = ""
         for w in words:
-            if len(cur_line) + len(w) > 28:
+            if len(cur_line) + len(w) > max_chars:
                 lines.append(cur_line.strip())
                 cur_line = w + " "
             else:
@@ -517,8 +524,8 @@ class UI(FloatLayout):
         
         # Max 2 lines
         lines = lines[:2]
-        if len(lines) > 1 and len(lines[1]) > 28:
-            lines[1] = lines[1][:25] + "..."
+        if len(lines) > 1 and len(lines[1]) > max_chars:
+            lines[1] = lines[1][:max_chars-3] + "..."
             
         # Vertically align info with the art
         info_top = art_y + art_size - int(dp(16))
@@ -960,9 +967,9 @@ class UI(FloatLayout):
             text=preset,
             multiline=False,
             size_hint=(None, None),
-            size=(min(700, self.width - 100), int(dp(60))),
+            size=(min(int(dp(1200)), self.width - int(dp(100))), int(dp(80))),
             pos_hint={'center_x': 0.5, 'center_y': 0.5},
-            font_size=sp(28),
+            font_size=sp(40),
             background_color=(C.GLASS_BG[0], C.GLASS_BG[1], C.GLASS_BG[2], 0.9),
             foreground_color=C.TEXT,
             cursor_color=C.CYAN,
@@ -1040,9 +1047,9 @@ class UI(FloatLayout):
 
     def _draw_reg_input_screen(self, w, h, label):
         cx, cy = w // 2, h // 2
-        self._text(label, cx - int(dp(150)), cy + int(dp(100)), font_size=sp(36), color=C.TEXT, bold=True)
-        self._text("Type below, then tap Submit or press ENTER", cx - int(dp(220)), cy + int(dp(60)), font_size=sp(22), color=C.TEXT_MUTED)
-        self._draw_reg_button(cx, cy - int(dp(100)), int(dp(240)), int(dp(54)), "Submit", C.CYAN)
+        self._text(label, cx - int(dp(180)), cy + int(dp(140)), font_size=sp(36), color=C.TEXT, bold=True)
+        self._text("Type below, then tap Submit or press ENTER", cx - int(dp(220)), cy + int(dp(90)), font_size=sp(22), color=C.TEXT_MUTED)
+        self._draw_reg_button(cx, cy - int(dp(120)), int(dp(260)), int(dp(64)), "Submit", C.CYAN)
 
     def _draw_reg_pick_file(self, w, h):
         cx, cy = w // 2, h // 2
