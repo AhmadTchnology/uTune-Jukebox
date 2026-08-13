@@ -1,5 +1,13 @@
 import queue
 import threading
+import json
+import subprocess
+import shutil
+import os
+import tempfile
+
+from platform_utils import get_subprocess_flags
+
 
 class JukeboxQueue:
     def __init__(self):
@@ -11,18 +19,16 @@ class JukeboxQueue:
         """Enqueues a song if it's not already in the queue or playing."""
         with self._lock:
             if currently_playing_uid == uid:
-                return False # Already playing
+                return False
 
-            # Check if already in queue
             for item in self._items:
-                if item['uid'] == uid:
-                    return False # Already in queue
+                if item["uid"] == uid:
+                    return False
 
-            item = {'uid': uid, 'title': title, 'youtube_url': youtube_url}
+            item = {"uid": uid, "title": title, "youtube_url": youtube_url}
             self._items.append(item)
             self._q.put(item)
-            
-            # Start async metadata fetch for the queue item
+
             threading.Thread(target=self._fetch_metadata_bg, args=(item,), daemon=True).start()
             return True
 
@@ -30,23 +36,18 @@ class JukeboxQueue:
         self._fetch_local_metadata(item)
 
     def _fetch_local_metadata(self, item):
-        import json
-        import subprocess
-        import shutil
-        import os
-        import tempfile
         try:
             from config import config
-            file_path = item['youtube_url']
+
+            file_path = item["youtube_url"]
             if not os.path.isabs(file_path):
                 file_path = os.path.join(config.music_folder, file_path)
 
-            # 1. Fallback metadata from yt-dlp json/thumbnail
             base_path = os.path.splitext(file_path)[0]
             json_path = base_path + ".info.json"
             if os.path.exists(json_path):
                 try:
-                    with open(json_path, 'r', encoding='utf-8') as f:
+                    with open(json_path, "r", encoding="utf-8") as f:
                         data = json.load(f)
                     artist = data.get("artist") or data.get("uploader") or data.get("channel")
                     if artist:
@@ -57,7 +58,7 @@ class JukeboxQueue:
                         item["title"] = data["title"]
                 except Exception:
                     pass
-            
+
             for ext in [".webp", ".jpg", ".png", ".jpeg"]:
                 img_path = base_path + ext
                 if os.path.exists(img_path) and "image_bytes" not in item:
@@ -80,7 +81,7 @@ class JukeboxQueue:
             ]
             proc = subprocess.run(
                 cmd, capture_output=True, text=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                **get_subprocess_flags(),
             )
             if proc.returncode == 0:
                 data = json.loads(proc.stdout)
@@ -102,7 +103,7 @@ class JukeboxQueue:
 
             # Extract embedded cover art
             ffmpeg = shutil.which("ffmpeg")
-            if ffmpeg:
+            if ffmpeg and "image_bytes" not in item:
                 tmp_cover = os.path.join(tempfile.gettempdir(), f"utune_q_{id(item)}.jpg")
                 extract_cmd = [
                     ffmpeg, "-y", "-i", file_path,
@@ -111,7 +112,7 @@ class JukeboxQueue:
                 ]
                 cover_proc = subprocess.run(
                     extract_cmd, capture_output=True,
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                    **get_subprocess_flags(),
                 )
                 if cover_proc.returncode == 0 and os.path.isfile(tmp_cover):
                     with open(tmp_cover, "rb") as f:
@@ -125,8 +126,6 @@ class JukeboxQueue:
         except Exception as e:
             print("[Queue] Local metadata error:", e)
 
-
-
     def dequeue(self):
         """Blocks until a track is available, returns it."""
         item = self._q.get()
@@ -136,10 +135,9 @@ class JukeboxQueue:
         return item
 
     def get_upcoming(self):
-        """Returns a list of upcoming items."""
         with self._lock:
             return list(self._items)
-        
+
     def clear(self):
         with self._lock:
             while not self._q.empty():
@@ -150,7 +148,6 @@ class JukeboxQueue:
             self._items.clear()
 
     def reorder(self, from_idx, to_idx):
-        """Move an item from from_idx to to_idx in the upcoming list."""
         with self._lock:
             if from_idx < 0 or from_idx >= len(self._items):
                 return
@@ -160,7 +157,6 @@ class JukeboxQueue:
                 return
             item = self._items.pop(from_idx)
             self._items.insert(to_idx, item)
-            # Rebuild the internal queue to match the new order
             while not self._q.empty():
                 try:
                     self._q.get_nowait()

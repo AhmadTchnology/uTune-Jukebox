@@ -1,24 +1,22 @@
 db_path: "jukebox.db"
 rfid:
-  # For Linux (mfrc522 / spidev): mode="mfrc522"
-  # For Windows (USB Keyboard Emulator or USB Serial): mode="serial" or mode="keyboard"
-  mode: "keyboard"
+  # USB OTG keyboard-emulating reader: mode="keyboard"
+  # USB OTG serial reader: mode="serial"
+  # Built-in Android NFC: mode="nfc_android"
+  mode: "nfc_android"
   debounce_seconds: 5.0
-  serial_port: "COM3"
+  serial_port: "/dev/ttyUSB0"
   baud_rate: 9600
 player:
-  # Can be empty, uses system path if so
-  mpv_path: "C:\\Program Files\\MPV Player\\mpv.exe"
   ytdlp_format: "bestaudio/best"
-  # Path to folder containing local audio files
+  # Path to folder containing local audio files (relative to app storage)
   music_folder: "music"
   # Cookie options for YouTube (pick ONE):
-  # Option 1: Browser name (edge, chrome, firefox) — only works if that browser is CLOSED
+  # Option 1: Browser name — only works on desktop
   cookies_from_browser: ""
-  # Option 2: Path to a Netscape-format cookies.txt file (recommended)
-  # Export from browser using "Get cookies.txt LOCALLY" extension, save as cookies.txt
+  # Option 2: Path to a Netscape-format cookies.txt file
   cookies_file: "cookies.txt"
 ui:
   resolution: [1024, 600]
-  fullscreen: false
+  fullscreen: true
   fps: 30

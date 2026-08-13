@@ -1,7 +1,6 @@
 import yaml
 import os
-
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+from platform_utils import get_config_path, get_db_path, get_storage_dir
 
 
 class Config:
@@ -9,18 +8,20 @@ class Config:
         self.config = self._load()
 
     def _load(self):
-        if not os.path.exists(CONFIG_PATH):
-            raise FileNotFoundError(f"Missing config file at {CONFIG_PATH}")
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return yaml.safe_load(f)
+        config_path = get_config_path()
+        if not os.path.exists(config_path):
+            # Return sensible defaults if config file missing (e.g. first run on Android)
+            return {}
+        with open(config_path, "r", encoding="utf-8") as f:
+            return yaml.safe_load(f) or {}
 
     @property
     def db_path(self):
-        return self.config.get("db_path", "jukebox.db")
+        return get_db_path(self.config.get("db_path", "jukebox.db"))
 
     @property
     def rfid_mode(self):
-        return self.config.get("rfid", {}).get("mode", "keyboard")
+        return self.config.get("rfid", {}).get("mode", "nfc_android")
 
     @property
     def rfid_debounce(self):
@@ -28,15 +29,11 @@ class Config:
 
     @property
     def rfid_serial_port(self):
-        return self.config.get("rfid", {}).get("serial_port", "COM3")
+        return self.config.get("rfid", {}).get("serial_port", "/dev/ttyUSB0")
 
     @property
     def rfid_baud_rate(self):
         return self.config.get("rfid", {}).get("baud_rate", 9600)
-
-    @property
-    def mpv_path(self):
-        return self.config.get("player", {}).get("mpv_path", "mpv")
 
     @property
     def ytdlp_format(self):
@@ -46,7 +43,8 @@ class Config:
     def music_folder(self):
         path = self.config.get("player", {}).get("music_folder", "music")
         if not os.path.isabs(path):
-            path = os.path.join(os.path.dirname(__file__), path)
+            path = os.path.join(get_storage_dir(), path)
+        os.makedirs(path, exist_ok=True)
         return path
 
     @property
@@ -57,7 +55,7 @@ class Config:
     def ytdlp_cookies_file(self):
         path = self.config.get("player", {}).get("cookies_file", "")
         if path and not os.path.isabs(path):
-            path = os.path.join(os.path.dirname(__file__), path)
+            path = os.path.join(get_storage_dir(), path)
         return path
 
     @property
@@ -66,7 +64,7 @@ class Config:
 
     @property
     def ui_fullscreen(self):
-        return self.config.get("ui", {}).get("fullscreen", False)
+        return self.config.get("ui", {}).get("fullscreen", True)
 
     @property
     def ui_fps(self):
