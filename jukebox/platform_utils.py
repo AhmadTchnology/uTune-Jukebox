@@ -64,6 +64,8 @@ def request_android_permissions(callback=None):
             Permission.INTERNET,
             Permission.WRITE_EXTERNAL_STORAGE,
             Permission.READ_EXTERNAL_STORAGE,
+            "android.permission.NFC",
+            "android.permission.BLUETOOTH_CONNECT"
         ]
         # For Android 13+ (API 33+) we need these instead of READ_EXTERNAL_STORAGE
         try:

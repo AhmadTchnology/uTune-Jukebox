@@ -18,7 +18,7 @@ version = 1.0.0
 requirements = python3,kivy,pyjnius,pyyaml,yt-dlp,sqlite3,pillow
 
 # Android permissions
-android.permissions = INTERNET, NFC, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, READ_MEDIA_AUDIO, READ_MEDIA_IMAGES
+android.permissions = INTERNET, NFC, WRITE_EXTERNAL_STORAGE, READ_EXTERNAL_STORAGE, READ_MEDIA_AUDIO, READ_MEDIA_IMAGES, BLUETOOTH_CONNECT
 
 # Android API levels (Android 11 is API 30, but we compile against 33 for modern SDL2 compat)
 android.api = 33
