@@ -1,6 +1,6 @@
 import yaml
 import os
-from platform_utils import get_config_path, get_db_path, get_storage_dir
+from platform_utils import get_config_path, get_db_path, get_storage_dir, get_music_dir
 
 
 class Config:
@@ -41,11 +41,12 @@ class Config:
 
     @property
     def music_folder(self):
-        path = self.config.get("player", {}).get("music_folder", "music")
-        if not os.path.isabs(path):
-            path = os.path.join(get_storage_dir(), path)
-        os.makedirs(path, exist_ok=True)
-        return path
+        path = self.config.get("player", {}).get("music_folder", "")
+        if path and os.path.isabs(path):
+            os.makedirs(path, exist_ok=True)
+            return path
+        # Use the platform-aware shared music directory
+        return get_music_dir()
 
     @property
     def ytdlp_cookies_browser(self):

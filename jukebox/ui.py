@@ -481,6 +481,7 @@ class UI(FloatLayout):
             self._draw_idle(x, y_pad, w, h)
 
     def _draw_playing(self, x, top_y, w, track):
+        art_size = min(int(dp(200)), int(w * 0.35))
         art_x = x
         art_y = top_y - art_size
 
@@ -1195,9 +1196,10 @@ class UI(FloatLayout):
         if not os.path.isdir(folder):
             self.local_files = []
             return
+        scan_exts = AUDIO_EXTENSIONS | {".webm", ".mp4"}
         self.local_files = sorted(
             f for f in os.listdir(folder)
-            if os.path.splitext(f)[1].lower() in AUDIO_EXTENSIONS
+            if os.path.splitext(f)[1].lower() in scan_exts
         )
         self.file_scroll = 0
         self.file_selected = 0 if self.local_files else -1
@@ -1265,6 +1267,15 @@ class UI(FloatLayout):
 
     def _download_youtube(self, url):
         import yt_dlp
+        import re
+
+        # Clean the URL: strip whitespace, zero-width chars, quotes
+        url = url.strip().strip('"').strip("'").strip()
+        url = re.sub(r'[\u200b\u200c\u200d\ufeff\u00a0]', '', url)
+
+        # Add https:// if user pasted a bare domain
+        if url and not url.startswith(('http://', 'https://')):
+            url = 'https://' + url
 
         self.download_progress = "Starting download..."
         music_dir = self.config.music_folder

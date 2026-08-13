@@ -20,7 +20,20 @@ def get_storage_dir():
 
 
 def get_music_dir():
-    music_dir = os.path.join(get_storage_dir(), "music")
+    """Return a user-accessible music folder.
+
+    On Android this lives under shared storage so file managers can see it.
+    On desktop it sits next to the app files.
+    """
+    if is_android():
+        try:
+            from android.storage import primary_external_storage_path
+            ext = primary_external_storage_path()
+            music_dir = os.path.join(ext, "Music", "uTune")
+        except Exception:
+            music_dir = os.path.join(get_storage_dir(), "music")
+    else:
+        music_dir = os.path.join(get_storage_dir(), "music")
     os.makedirs(music_dir, exist_ok=True)
     return music_dir
 
