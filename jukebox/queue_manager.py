@@ -33,8 +33,8 @@ class JukeboxQueue:
         try:
             from config import config
 
-            file_path = item["file_path"]
-            if not os.path.isabs(file_path):
+            file_path = item["file_path"].replace('\\', '/')
+            if not os.path.isabs(file_path) and not file_path.startswith("http"):
                 file_path = os.path.join(config.music_folder, file_path)
 
             base_path = os.path.splitext(file_path)[0]
@@ -44,7 +44,7 @@ class JukeboxQueue:
             
             if os.path.exists(json_path):
                 try:
-                    with open(json_path, "r", encoding="utf-8") as f:
+                    with open(json_path, "r", encoding="utf-8-sig") as f:
                         data = json.load(f)
                     artist = data.get("artist") or data.get("uploader") or data.get("channel")
                     if artist:

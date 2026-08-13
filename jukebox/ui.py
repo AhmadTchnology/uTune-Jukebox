@@ -531,10 +531,10 @@ class UI(FloatLayout):
         info_top = art_y + art_size - int(dp(16))
         
         for i, line in enumerate(lines):
-            self._text(line, info_x, info_top - i * int(dp(32)), font_size=sp(28), color=C.TEXT, bold=True)
+            self._text(line, info_x, info_top - i * int(dp(32)), font_size=sp(24), color=C.TEXT, bold=True)
         
         artist = track.get("artist", "Unknown Artist")
-        self._text(artist, info_x, info_top - len(lines) * int(dp(32)) - int(dp(8)), font_size=sp(22), color=C.TEXT_SEC)
+        self._text(artist, info_x, info_top - len(lines) * int(dp(32)) - int(dp(8)), font_size=sp(18), color=C.TEXT_SEC)
 
         album = track.get("album", "")
         offset = len(lines) * int(dp(32)) + int(dp(52))
@@ -591,53 +591,52 @@ class UI(FloatLayout):
             return
 
         bar_h = int(dp(6))
+        time_w = int(dp(45))
+        bar_x = x + time_w
+        bar_w = w - time_w * 2
 
         if not self.player.play_start_time:
             # Loading indicator — pulsing bar
             Color(1, 1, 1, 0.1)
-            RoundedRectangle(pos=(x, y), size=(w, bar_h), radius=[3])
+            RoundedRectangle(pos=(bar_x, y), size=(bar_w, bar_h), radius=[3])
             pulse_w = int(dp(64))
-            pulse_x = int((w - pulse_w) * ((math.sin(self.pulse_phase * 4) + 1) / 2))
+            pulse_x = int((bar_w - pulse_w) * ((math.sin(self.pulse_phase * 4) + 1) / 2))
             Color(*C.CYAN)
-            RoundedRectangle(pos=(x + pulse_x, y), size=(pulse_w, bar_h), radius=[3])
-            self._text("Loading stream...", x, y + int(dp(16)), font_size=sp(16), color=C.CYAN)
+            RoundedRectangle(pos=(bar_x + pulse_x, y), size=(pulse_w, bar_h), radius=[3])
+            self._text("Loading stream...", bar_x, y + int(dp(16)), font_size=sp(16), color=C.CYAN)
             return
 
         elapsed = _time.time() - self.player.play_start_time
         duration = track.get("duration")
         pct = min(1.0, elapsed / float(duration)) if duration else 1.0
 
+        # Draw start time
+        mins, secs = int(elapsed) // 60, int(elapsed) % 60
+        self._text(f"{mins}:{secs:02d}", x, y - int(dp(6)), font_size=sp(14), color=_rgba(C.CYAN, 0.8))
+
         # Background
         Color(1, 1, 1, 0.1)
-        RoundedRectangle(pos=(x, y), size=(w, bar_h), radius=[3])
+        RoundedRectangle(pos=(bar_x, y), size=(bar_w, bar_h), radius=[3])
         
         # Fill
-        fill_w = int(w * pct)
+        fill_w = int(bar_w * pct)
         if fill_w > 0:
             Color(*C.CYAN)
-            RoundedRectangle(pos=(x, y), size=(fill_w, bar_h), radius=[3])
+            RoundedRectangle(pos=(bar_x, y), size=(fill_w, bar_h), radius=[3])
             # Playhead dot
             Color(1, 1, 1, 1)
             dot_sz = int(dp(12))
-            Ellipse(pos=(x + fill_w - dot_sz // 2, y + bar_h // 2 - dot_sz // 2), size=(dot_sz, dot_sz))
+            Ellipse(pos=(bar_x + fill_w - dot_sz // 2, y + bar_h // 2 - dot_sz // 2), size=(dot_sz, dot_sz))
             # Playhead glow
             Color(*C.CYAN[:3], 0.4)
-            Ellipse(pos=(x + fill_w - dot_sz, y + bar_h // 2 - dot_sz), size=(dot_sz*2, dot_sz*2))
+            Ellipse(pos=(bar_x + fill_w - dot_sz, y + bar_h // 2 - dot_sz), size=(dot_sz*2, dot_sz*2))
 
-        # Time labels below the bar
-        mins, secs = int(elapsed) // 60, int(elapsed) % 60
-        self._text(
-            f"{mins}:{secs:02d}", x, y - int(dp(22)),
-            font_size=sp(16), color=_rgba(C.CYAN, 0.8),
-        )
+        # Draw end time
         if duration:
             dur = float(duration)
             dm, ds = int(dur) // 60, int(dur) % 60
             # Right align duration
-            self._text(
-                f"{dm}:{ds:02d}", x + w - int(dp(36)), y - int(dp(22)),
-                font_size=sp(16), color=C.TEXT_MUTED,
-            )
+            self._text(f"{dm}:{ds:02d}", x + w - int(dp(35)), y - int(dp(6)), font_size=sp(14), color=C.TEXT_MUTED)
 
     def _draw_idle(self, x, y_pad, w, h):
         cx = x + w // 2
@@ -1210,7 +1209,7 @@ class UI(FloatLayout):
     def _get_title_from_file(self, filename):
         import json
 
-        file_path = os.path.join(self.config.music_folder, filename)
+        file_path = os.path.join(self.config.music_folder, filename.replace('\\', '/'))
         base_path = os.path.splitext(file_path)[0]
         json_path = base_path + ".info.json"
         if not os.path.exists(json_path):
@@ -1218,7 +1217,7 @@ class UI(FloatLayout):
             
         if os.path.exists(json_path):
             try:
-                with open(json_path, "r", encoding="utf-8") as f:
+                with open(json_path, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
                 title = data.get("title")
                 artist = data.get("artist") or data.get("uploader") or data.get("channel")
