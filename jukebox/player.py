@@ -69,9 +69,13 @@ class Player:
             from jnius import autoclass
 
             MediaPlayer = autoclass("android.media.MediaPlayer")
+            FileInputStream = autoclass("java.io.FileInputStream")
+            
             mp = MediaPlayer()
-            mp.setDataSource(file_path)
+            fis = FileInputStream(file_path)
+            mp.setDataSource(fis.getFD())
             mp.prepare()
+            fis.close()
 
             with self.lock:
                 self._backend = mp
@@ -140,13 +144,49 @@ class Player:
                 self._report(f"Playback error: {self.last_error}")
 
         except FileNotFoundError:
-            self.last_error = "mpv not found"
-            self._report(self.last_error)
+            self._report("mpv not found, falling back to Kivy SoundLoader...")
+            self._play_kivy(file_path, title)
         except Exception as e:
             self.last_error = str(e)
             self._report(f"Playback error: {e}")
-        finally:
             self._cleanup()
+
+    def _play_kivy(self, file_path, title):
+        """Fallback desktop player using Kivy's SoundLoader (ffpyplayer/sdl2)."""
+        from kivy.core.audio import SoundLoader
+        from kivy.clock import Clock
+        
+        sound = SoundLoader.load(file_path)
+        if not sound:
+            self.last_error = "SoundLoader could not load audio."
+            self._report(self.last_error)
+            self._cleanup()
+            return
+
+        with self.lock:
+            self._backend = sound
+            self.play_start_time = time.time()
+
+        self._report(f"Playing: {title}")
+        
+        # We must play from main thread safely
+        def do_play(dt):
+            if sound:
+                sound.play()
+        Clock.schedule_once(do_play, 0)
+        
+        # Wait up to 2 seconds for state to transition to 'play'
+        for _ in range(20):
+            if sound.state == 'play' or self._stop_requested:
+                break
+            time.sleep(0.1)
+
+        # Wait while playing
+        while sound.state == 'play' and not self._stop_requested:
+            time.sleep(0.2)
+            
+        Clock.schedule_once(lambda dt: sound.stop(), 0)
+        self._cleanup()
 
     def _fetch_local_metadata(self, file_path, track_info):
         """Extract duration and album art from local audio files."""
@@ -259,15 +299,24 @@ class Player:
             except Exception:
                 pass
         else:
-            try:
-                backend.terminate()
-            except Exception:
-                pass
-            try:
-                backend.wait(timeout=1)
-            except Exception:
+            if hasattr(backend, 'terminate'):
+                # It's a subprocess (mpv)
                 try:
-                    backend.kill()
+                    backend.terminate()
+                except Exception:
+                    pass
+                try:
+                    backend.wait(timeout=1)
+                except Exception:
+                    try:
+                        backend.kill()
+                    except Exception:
+                        pass
+            elif hasattr(backend, 'stop'):
+                # It's a Kivy Sound object
+                try:
+                    from kivy.clock import Clock
+                    Clock.schedule_once(lambda dt: backend.stop(), 0)
                 except Exception:
                     pass
 

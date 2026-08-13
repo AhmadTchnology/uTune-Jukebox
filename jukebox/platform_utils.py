@@ -4,11 +4,8 @@ import sys
 
 
 def is_android():
-    try:
-        import android  # noqa: F401
-        return True
-    except ImportError:
-        return False
+    from kivy.utils import platform
+    return platform == 'android'
 
 
 def is_desktop():
@@ -68,6 +65,12 @@ def request_android_permissions(callback=None):
             Permission.WRITE_EXTERNAL_STORAGE,
             Permission.READ_EXTERNAL_STORAGE,
         ]
+        # For Android 13+ (API 33+) we need these instead of READ_EXTERNAL_STORAGE
+        try:
+            perms.extend([Permission.READ_MEDIA_AUDIO, Permission.READ_MEDIA_IMAGES])
+        except AttributeError:
+            pass # Older android.permissions API doesn't have these constants yet
+
         request_permissions(perms, callback)
         print(f"[Platform] Requested permissions: {perms}")
     except Exception as e:

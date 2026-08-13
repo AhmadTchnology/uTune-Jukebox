@@ -352,26 +352,26 @@ class UI(FloatLayout):
 
         # Glow pulse when playing
         if self.player.is_playing:
-            glow_a = 0.06 + 0.04 * math.sin(self.pulse_phase * 1.5)
+            glow_a = 0.15 + 0.1 * math.sin(self.pulse_phase * 2.0)
             Color(*C.CYAN[:3], glow_a)
-            Line(rounded_rectangle=(x - 2, y - 2, size + 4, size + 4, 14), width=1.5)
+            Line(rounded_rectangle=(x - 4, y - 4, size + 8, size + 8, 16), width=3.0)
 
     def _draw_progress_bar(self, x, y, w):
         track = self.player.current_track
         if not track:
             return
 
-        bar_h = int(dp(2))
+        bar_h = int(dp(4))
 
         if not self.player.play_start_time:
             # Loading indicator — pulsing bar
-            Color(1, 1, 1, 0.07)
-            Rectangle(pos=(x, y), size=(w, bar_h))
-            pulse_w = int(dp(32))
-            pulse_x = int((w - pulse_w) * ((math.sin(self.pulse_phase * 3) + 1) / 2))
+            Color(1, 1, 1, 0.1)
+            RoundedRectangle(pos=(x, y), size=(w, bar_h), radius=[2])
+            pulse_w = int(dp(48))
+            pulse_x = int((w - pulse_w) * ((math.sin(self.pulse_phase * 4) + 1) / 2))
             Color(*C.CYAN)
-            Rectangle(pos=(x + pulse_x, y), size=(pulse_w, bar_h))
-            self._text("Loading...", x, y - int(dp(20)), font_size=sp(22), color=C.CYAN)
+            RoundedRectangle(pos=(x + pulse_x, y), size=(pulse_w, bar_h), radius=[2])
+            self._text("Loading...", x, y - int(dp(24)), font_size=sp(24), color=C.CYAN)
             return
 
         elapsed = _time.time() - self.player.play_start_time
@@ -379,19 +379,23 @@ class UI(FloatLayout):
         pct = min(1.0, elapsed / float(duration)) if duration else 1.0
 
         # Background
-        Color(1, 1, 1, 0.07)
-        Rectangle(pos=(x, y), size=(w, bar_h))
+        Color(1, 1, 1, 0.1)
+        RoundedRectangle(pos=(x, y), size=(w, bar_h), radius=[2])
         # Fill
         fill_w = int(w * pct)
         if fill_w > 0:
             Color(*C.CYAN)
-            Rectangle(pos=(x, y), size=(fill_w, bar_h))
+            RoundedRectangle(pos=(x, y), size=(fill_w, bar_h), radius=[2])
+            # Playhead dot
+            Color(1, 1, 1, 1)
+            dot_sz = int(dp(10))
+            Ellipse(pos=(x + fill_w - dot_sz // 2, y + bar_h // 2 - dot_sz // 2), size=(dot_sz, dot_sz))
 
         # Time labels
         mins, secs = int(elapsed) // 60, int(elapsed) % 60
         self._text(
-            f"{mins}:{secs:02d}", x, y - int(dp(20)),
-            font_size=sp(22), color=_rgba(C.CYAN, 0.7),
+            f"{mins}:{secs:02d}", x, y - int(dp(24)),
+            font_size=sp(24), color=_rgba(C.CYAN, 0.8),
         )
         if duration:
             dur = float(duration)
@@ -454,11 +458,11 @@ class UI(FloatLayout):
             self._text("Scan cards to add songs", x + w // 2 - int(dp(72)), top - int(dp(80)), font_size=sp(18), color=C.TEXT_MUTED)
             return
 
-        card_h_next = int(dp(48))
-        card_h_normal = int(dp(40))
-        gap = int(dp(6))
-        max_visible = min(len(upcoming), 5)
-        iy = top - int(dp(40))
+        card_h_next = int(dp(64))
+        card_h_normal = int(dp(54))
+        gap = int(dp(12))
+        max_visible = min(len(upcoming), 6)
+        iy = top - int(dp(44))
 
         for i in range(max_visible):
             item = upcoming[i]
@@ -466,28 +470,28 @@ class UI(FloatLayout):
             ch = card_h_next if is_next else card_h_normal
 
             # Glass card background
-            bg_alpha = 0.45 if is_next else 0.35
+            bg_alpha = 0.55 if is_next else 0.40
             Color(*C.GLASS_BG[:3], bg_alpha)
-            RoundedRectangle(pos=(x, iy - ch), size=(w, ch), radius=[10])
+            RoundedRectangle(pos=(x, iy - ch), size=(w, ch), radius=[14])
 
             # Border
             border_c = C.CYAN if is_next else C.VIOLET
-            border_a = 0.38 if is_next else 0.20
+            border_a = 0.45 if is_next else 0.25
             Color(*border_c[:3], border_a)
-            Line(rounded_rectangle=(x, iy - ch, w, ch, 10), width=1)
+            Line(rounded_rectangle=(x, iy - ch, w, ch, 14), width=1.5 if is_next else 1)
 
             # Highlight bar for "next" card
             if is_next:
-                Color(*C.CYAN[:3], 0.2)
-                Rectangle(pos=(x, iy - 1), size=(w, 1))
+                Color(*C.CYAN[:3], 0.3)
+                Rectangle(pos=(x, iy - 2), size=(w, 2))
 
             # Mini album art
-            thumb_size = int(dp(36)) if is_next else int(dp(28))
-            thumb_x = x + int(dp(8))
+            thumb_size = int(dp(44)) if is_next else int(dp(36))
+            thumb_x = x + int(dp(10))
             thumb_y = iy - ch + (ch - thumb_size) // 2
             accent = C.CYAN if i % 2 == 0 else C.VIOLET
             Color(*accent[:3], 0.3)
-            RoundedRectangle(pos=(thumb_x, thumb_y), size=(thumb_size, thumb_size), radius=[6])
+            RoundedRectangle(pos=(thumb_x, thumb_y), size=(thumb_size, thumb_size), radius=[8])
 
             img_bytes = item.get("image_bytes")
             if img_bytes:
@@ -499,21 +503,21 @@ class UI(FloatLayout):
                 tex = self._mini_cache.get(cache_key)
                 if tex:
                     Color(1, 1, 1, 1)
-                    RoundedRectangle(texture=tex, pos=(thumb_x, thumb_y), size=(thumb_size, thumb_size), radius=[6])
+                    RoundedRectangle(texture=tex, pos=(thumb_x, thumb_y), size=(thumb_size, thumb_size), radius=[8])
 
-            Color(*accent[:3], 0.3)
-            Line(rounded_rectangle=(thumb_x, thumb_y, thumb_size, thumb_size, 6), width=1)
+            Color(*accent[:3], 0.4)
+            Line(rounded_rectangle=(thumb_x, thumb_y, thumb_size, thumb_size, 8), width=1.5)
 
             # Title
-            text_x = thumb_x + thumb_size + int(dp(8))
+            text_x = thumb_x + thumb_size + int(dp(12))
             title = item.get("title", "Unknown")
-            if len(title) > 22:
-                title = title[:19] + "..."
-            self._text(title, text_x, iy - ch // 2 + int(dp(2)), font_size=sp(20), color=C.TEXT_SLATE, bold=True)
+            if len(title) > 26:
+                title = title[:23] + "..."
+            self._text(title, text_x, iy - ch // 2 + int(dp(4)), font_size=sp(22 if is_next else 20), color=C.TEXT_SLATE, bold=True)
 
             artist = item.get("artist", "")
             if artist:
-                self._text(artist, text_x, iy - ch // 2 - int(dp(12)), font_size=sp(16), color=C.TEXT_DIM)
+                self._text(artist, text_x, iy - ch // 2 - int(dp(14)), font_size=sp(18 if is_next else 16), color=C.TEXT_DIM)
 
             iy -= ch + gap
 
