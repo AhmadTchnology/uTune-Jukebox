@@ -58,7 +58,7 @@ class C:
     CYAN        = _c(34, 211, 238)
     VIOLET      = _c(139, 92, 246)
     VIOLET_DIM  = _c(109, 40, 217)
-    GLASS_BG    = _c(30, 27, 75)
+    GLASS_BG    = _c(15, 23, 42)
     TEXT        = _c(241, 245, 249)
     TEXT_SEC     = _c(148, 163, 184)
     TEXT_MUTED   = _c(71, 85, 105)
@@ -361,10 +361,8 @@ class UI(FloatLayout):
         if w < 10 or h < 10:
             return
 
-        pad = int(dp(20))
-        right_w = int(dp(240))
-        divider_x = w - right_w - pad
-        left_w = divider_x - pad
+        pad = int(dp(28))
+        bar_h = int(dp(64))
 
         with self.canvas:
             # 1 — Background
@@ -377,18 +375,28 @@ class UI(FloatLayout):
                 self._draw_flash(w, h)
 
             if self.page == "player":
-                # 3 — Left panel: Now Playing
-                self._draw_now_playing(pad, pad, left_w, h)
-
-                # 4 — Divider
-                Color(1, 1, 1, 0.06)
-                Rectangle(pos=(divider_x, pad), size=(1, h - pad * 2 - int(dp(36))))
-
-                # 5 — Right panel: Queue
-                self._draw_queue(divider_x + int(dp(18)), pad, right_w - int(dp(18)), h)
+                if h > w:
+                    # Portrait layout (e.g., 1200x1920)
+                    top_h = int(h * 0.55)
+                    bot_h = h - top_h - bar_h
+                    
+                    # Top panel: Now Playing
+                    self._draw_now_playing(pad, h - top_h + pad, w - pad*2, top_h)
+                    
+                    # Bottom panel: Queue
+                    self._draw_queue(pad, bar_h, w - pad*2, bot_h)
+                else:
+                    # Landscape fallback
+                    right_w = int(dp(320))
+                    divider_x = w - right_w - pad
+                    left_w = divider_x - pad
+                    self._draw_now_playing(pad, bar_h, left_w, h - bar_h)
+                    Color(1, 1, 1, 0.06)
+                    Rectangle(pos=(divider_x, bar_h), size=(1, h - bar_h - pad))
+                    self._draw_queue(divider_x + int(dp(24)), bar_h, right_w - int(dp(24)), h - bar_h)
 
                 # 6 — Bottom bar
-                self._draw_bottom_bar(w, h)
+                self._draw_bottom_bar(w, bar_h)
             else:
                 self._draw_reg_header(w, h)
                 if self.reg_state == REG_STATE_HOME:
@@ -473,7 +481,6 @@ class UI(FloatLayout):
             self._draw_idle(x, y_pad, w, h)
 
     def _draw_playing(self, x, top_y, w, track):
-        art_size = int(dp(160))
         art_x = x
         art_y = top_y - art_size
 
@@ -709,42 +716,42 @@ class UI(FloatLayout):
 
     # ── bottom bar ───────────────────────────────────────────────────────────
     def _draw_bottom_bar(self, w, h):
-        bar_h = int(dp(40))
+        bar_h = int(dp(64))
         bar_y = 0
 
         # Top border
         Color(1, 1, 1, 0.06)
         Rectangle(pos=(0, bar_h), size=(w, 1))
 
-        # Buttons
-        self._draw_reg_button(int(dp(60)), bar_h // 2, int(dp(80)), int(dp(30)), "Skip", C.TEXT_SEC)
-        self._draw_reg_button(int(dp(160)), bar_h // 2, int(dp(100)), int(dp(30)), "Register", C.CYAN)
-        self._draw_reg_button(int(dp(260)), bar_h // 2, int(dp(80)), int(dp(30)), "Quit", C.TEXT_SEC)
-
         # LIVE badge (right side)
-        live_w, live_h = int(dp(48)), int(dp(20))
-        live_x = w - int(dp(24)) - live_w
+        live_w, live_h = int(dp(64)), int(dp(28))
+        live_x = w - int(dp(28)) - live_w
         live_y = bar_h // 2 - live_h // 2
 
         Color(*C.CYAN[:3], 0.04)
-        RoundedRectangle(pos=(live_x, live_y), size=(live_w, live_h), radius=[11])
+        RoundedRectangle(pos=(live_x, live_y), size=(live_w, live_h), radius=[14])
         Color(*C.CYAN[:3], 0.2)
-        Line(rounded_rectangle=(live_x, live_y, live_w, live_h, 11), width=1)
+        Line(rounded_rectangle=(live_x, live_y, live_w, live_h, 14), width=1)
 
         # Pulsing dot
         dot_a = 0.8 + 0.2 * math.sin(self.pulse_phase * 3)
         Color(*C.CYAN[:3], dot_a)
-        dot_sz = int(dp(5))
-        Ellipse(pos=(live_x + int(dp(6)), live_y + live_h // 2 - dot_sz // 2), size=(dot_sz, dot_sz))
+        dot_sz = int(dp(6))
+        Ellipse(pos=(live_x + int(dp(10)), live_y + live_h // 2 - dot_sz // 2), size=(dot_sz, dot_sz))
 
-        self._text("LIVE", live_x + int(dp(16)), live_y + int(dp(3)), font_size=sp(14), color=_rgba(C.CYAN, 0.7), bold=True)
+        self._text("LIVE", live_x + int(dp(22)), live_y + int(dp(5)), font_size=sp(14), color=_rgba(C.CYAN, 0.7), bold=True)
 
         # Tap count
         count_str = f"{self.tap_count} cards tapped"
         self._text(
-            count_str, live_x - int(dp(120)), bar_h // 2 - int(dp(5)),
-            font_size=sp(17), color=C.TEXT_MUTED,
+            count_str, live_x - int(dp(160)), bar_h // 2 - int(dp(8)),
+            font_size=sp(18), color=C.TEXT_MUTED,
         )
+
+        # Buttons (Left side)
+        self._draw_reg_button(int(dp(80)), bar_h // 2, int(dp(100)), int(dp(36)), "Skip", C.TEXT_SEC)
+        self._draw_reg_button(int(dp(210)), bar_h // 2, int(dp(120)), int(dp(36)), "Register", C.CYAN)
+        self._draw_reg_button(int(dp(330)), bar_h // 2, int(dp(80)), int(dp(36)), "Quit", C.TEXT_SEC)
 
     # ── toast ────────────────────────────────────────────────────────────────
     def _draw_toast(self, w, h):
@@ -812,11 +819,12 @@ class UI(FloatLayout):
         # ── Registration page touch handling ──
         w, h = self.width, self.height
         cx = w // 2
+        cy = h // 2
 
         # Back button (top-right on all reg sub-screens except home)
-        back_x = w - 120
-        back_y = h - 60
-        if self._hit_btn(back_x, back_y, 100, 36, mx, my):
+        back_x = w - int(dp(120))
+        back_y = h - int(dp(60))
+        if self._hit_btn(back_x, back_y, int(dp(100)), int(dp(36)), mx, my):
             if self.reg_state in (REG_STATE_HOME, REG_STATE_DONE):
                 self.page = "player"
                 self._remove_text_input()
@@ -826,21 +834,21 @@ class UI(FloatLayout):
             return True
 
         if self.reg_state == REG_STATE_HOME:
-            if self._hit_btn(cx, h - 280, 260, 50, mx, my):
+            if self._hit_btn(cx, cy - int(dp(20)), int(dp(300)), int(dp(50)), mx, my):
                 self.reg_state = REG_STATE_WAITING_SCAN
                 return True
-            if self._hit_btn(cx, h - 350, 260, 50, mx, my):
+            if self._hit_btn(cx, cy - int(dp(90)), int(dp(300)), int(dp(50)), mx, my):
                 self._load_cards_list()
                 self.reg_state = REG_STATE_LIST
                 return True
 
         elif self.reg_state == REG_STATE_PICK_SOURCE:
-            if self._hit_btn(cx, h - 300, 300, 50, mx, my):
+            if self._hit_btn(cx, cy - int(dp(20)), int(dp(340)), int(dp(60)), mx, my):
                 self.selected_source = "youtube"
                 self.reg_state = REG_STATE_INPUT_URL
                 self._show_text_input("Enter YouTube URL:")
                 return True
-            if self._hit_btn(cx, h - 370, 300, 50, mx, my):
+            if self._hit_btn(cx, cy - int(dp(100)), int(dp(340)), int(dp(60)), mx, my):
                 self.selected_source = "local"
                 self._scan_local_files()
                 self.reg_state = REG_STATE_PICK_FILE
@@ -848,20 +856,20 @@ class UI(FloatLayout):
 
         elif self.reg_state in (REG_STATE_INPUT_URL, REG_STATE_INPUT_TITLE):
             # Submit button
-            btn_y = h // 2 - 80
-            if self._hit_btn(cx, btn_y, 200, 44, mx, my):
+            btn_y = cy - int(dp(80))
+            if self._hit_btn(cx, btn_y, int(dp(200)), int(dp(44)), mx, my):
                 self._submit_text_input()
                 return True
 
         elif self.reg_state == REG_STATE_PICK_FILE:
-            list_x = cx - 220
-            list_y_start = h - 200
-            item_h = 40
+            list_x = cx - int(dp(220))
+            list_y_start = cy + int(dp(100))
+            item_h = int(dp(50))
             visible = min(10, len(self.local_files) - self.file_scroll)
             for i in range(visible):
                 idx = self.file_scroll + i
                 iy = list_y_start - i * item_h
-                if list_x < mx < list_x + 440 and iy - item_h < my < iy:
+                if list_x < mx < list_x + int(dp(440)) and iy - item_h < my < iy:
                     self.file_selected = idx
                     filename = self.local_files[idx]
                     self.reg_url = filename
@@ -873,34 +881,34 @@ class UI(FloatLayout):
 
         elif self.reg_state == REG_STATE_CONFIRM:
             # Confirm button
-            if self._hit_btn(cx - 80, h // 2 - 100, 140, 44, mx, my):
+            if self._hit_btn(cx - int(dp(100)), cy - int(dp(100)), int(dp(160)), int(dp(50)), mx, my):
                 self._do_confirm_register()
                 return True
             # Cancel button
-            if self._hit_btn(cx + 80, h // 2 - 100, 140, 44, mx, my):
+            if self._hit_btn(cx + int(dp(100)), cy - int(dp(100)), int(dp(160)), int(dp(50)), mx, my):
                 self._reset_reg()
                 self.reg_state = REG_STATE_HOME
                 return True
 
         elif self.reg_state == REG_STATE_DONE:
             # "Register Another" button
-            if self._hit_btn(cx, h // 2 - 100, 260, 44, mx, my):
+            if self._hit_btn(cx, cy - int(dp(100)), int(dp(260)), int(dp(50)), mx, my):
                 self._reset_reg()
                 self.reg_state = REG_STATE_HOME
                 return True
 
         elif self.reg_state == REG_STATE_LIST:
-            list_x = cx - 280
-            list_y_start = self.height - 180
-            item_h = 48
+            list_x = cx - int(dp(300))
+            list_y_start = cy + int(dp(200))
+            item_h = int(dp(60))
             visible = min(9, len(self.cards_list) - self.cards_scroll)
             for i in range(visible):
                 idx = self.cards_scroll + i
                 if idx >= len(self.cards_list):
                     break
                 iy = list_y_start - i * item_h
-                del_x = list_x + 520
-                if del_x < mx < del_x + 40 and iy - item_h < my < iy:
+                del_x = list_x + int(dp(540))
+                if del_x < mx < del_x + int(dp(50)) and iy - item_h < my < iy:
                     uid = self.cards_list[idx]["uid"]
                     from registry import Registry
                     r = Registry(self.config.db_path)
@@ -983,90 +991,94 @@ class UI(FloatLayout):
         self._remove_text_input()
 
     def _draw_reg_header(self, w, h):
-        self._text("uTune", 28, h - 50, font_size=sp(38), color=C.CYAN, bold=True)
-        self._text("CARD REGISTRATION", 160, h - 42, font_size=sp(18), color=_rgba(C.VIOLET, 0.7), bold=True)
+        self._text("uTune", int(dp(28)), h - int(dp(50)), font_size=sp(38), color=C.CYAN, bold=True)
+        self._text("CARD REGISTRATION", int(dp(160)), h - int(dp(42)), font_size=sp(18), color=_rgba(C.VIOLET, 0.7), bold=True)
         Color(1, 1, 1, 0.08)
-        Rectangle(pos=(28, h - 70), size=(w - 56, 1))
+        Rectangle(pos=(int(dp(28)), h - int(dp(70))), size=(w - int(dp(56)), 1))
         # Back / Exit button (top-right)
         label = "← Player" if self.reg_state in (REG_STATE_HOME, REG_STATE_DONE) else "← Back"
-        self._draw_reg_button(w - 120, h - 60, 100, 36, label, C.TEXT_SEC)
+        self._draw_reg_button(w - int(dp(120)), h - int(dp(60)), int(dp(100)), int(dp(36)), label, C.TEXT_SEC)
 
     def _draw_reg_home(self, w, h):
         cx = w // 2
-        self._text("Card Manager", cx - 70, h - 140, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text(f"Cards registered: {self._card_count()}", cx - 80, h - 175, font_size=sp(22), color=C.TEXT_SEC)
-        self._draw_reg_button(cx, h - 280, 260, 50, "Register New Card", C.CYAN)
-        self._draw_reg_button(cx, h - 350, 260, 50, "View All Cards", C.VIOLET)
+        cy = h // 2
+        self._text("Card Manager", cx - int(dp(100)), cy + int(dp(100)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._text(f"Cards registered: {self._card_count()}", cx - int(dp(100)), cy + int(dp(60)), font_size=sp(24), color=C.TEXT_SEC)
+        self._draw_reg_button(cx, cy - int(dp(20)), int(dp(300)), int(dp(50)), "Register New Card", C.CYAN)
+        self._draw_reg_button(cx, cy - int(dp(90)), int(dp(300)), int(dp(50)), "View All Cards", C.VIOLET)
 
     def _draw_reg_waiting_scan(self, w, h):
         cx = w // 2
-        cy = h // 2 + 20
+        cy = h // 2
 
         # Pulsing ring
-        radius = 50 + int(5 * math.sin(self.pulse_phase * 2))
+        radius = int(dp(60)) + int(dp(10) * math.sin(self.pulse_phase * 2))
         ring_a = 0.47 + 0.24 * math.sin(self.pulse_phase * 3)
         Color(*C.CYAN[:3], ring_a)
         Line(circle=(cx, cy, radius), width=2)
 
         inner_a = 0.16 + 0.08 * math.sin(self.pulse_phase * 2 + 1)
         Color(*C.CYAN[:3], inner_a)
-        Ellipse(pos=(cx - 28, cy - 28), size=(56, 56))
+        Ellipse(pos=(cx - int(dp(34)), cy - int(dp(34))), size=(int(dp(68)), int(dp(68))))
 
-        self._text("Scan RFID Card", cx - 80, cy - radius - 40, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text("Place card on the reader...", cx - 110, cy - radius - 70, font_size=sp(22), color=C.TEXT_MUTED)
+        self._text("Scan RFID Card", cx - int(dp(110)), cy - radius - int(dp(50)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._text("Place card on the reader...", cx - int(dp(125)), cy - radius - int(dp(80)), font_size=sp(22), color=C.TEXT_MUTED)
 
     def _draw_reg_pick_source(self, w, h):
         cx = w // 2
-        self._text(f"Card UID: {self.scanned_uid}", cx - 100, h - 130, font_size=sp(20), color=C.CYAN)
+        cy = h // 2
+        self._text(f"Card UID: {self.scanned_uid}", cx - int(dp(100)), cy + int(dp(140)), font_size=sp(24), color=C.CYAN)
 
         if self.existing_card:
             self._text(
-                f"Already registered: {self.existing_card['title']}", cx - 160, h - 160,
-                font_size=sp(22), color=C.ORANGE,
+                f"Already registered: {self.existing_card['title']}", cx - int(dp(160)), cy + int(dp(100)),
+                font_size=sp(24), color=C.ORANGE,
             )
-            self._text("Continuing will overwrite", cx - 90, h - 185, font_size=sp(18), color=C.TEXT_MUTED)
+            self._text("Continuing will overwrite", cx - int(dp(100)), cy + int(dp(70)), font_size=sp(20), color=C.TEXT_MUTED)
 
-        self._text("Choose Audio Source", cx - 100, h - 230, font_size=sp(28), color=C.TEXT, bold=True)
-        self._draw_reg_button(cx, h - 300, 300, 50, "[1] YouTube URL", C.CYAN)
-        self._draw_reg_button(cx, h - 370, 300, 50, "[2] Local File", C.VIOLET)
+        self._text("Choose Audio Source", cx - int(dp(140)), cy + int(dp(50)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._draw_reg_button(cx, cy - int(dp(20)), int(dp(340)), int(dp(60)), "[1] YouTube URL", C.CYAN)
+        self._draw_reg_button(cx, cy - int(dp(100)), int(dp(340)), int(dp(60)), "[2] Local File", C.VIOLET)
 
     def _draw_reg_input_screen(self, w, h, label):
         cx = w // 2
-        self._text(label, cx - 100, h - 170, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text("Type below, then tap Submit or press ENTER", cx - 180, h // 2 - 50, font_size=sp(18), color=C.TEXT_MUTED)
+        cy = h // 2
+        self._text(label, cx - int(dp(130)), cy + int(dp(80)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._text("Type below, then tap Submit or press ENTER", cx - int(dp(190)), cy + int(dp(40)), font_size=sp(20), color=C.TEXT_MUTED)
         # Submit button below the text input
-        self._draw_reg_button(cx, h // 2 - 80, 200, 44, "Submit", C.CYAN)
+        self._draw_reg_button(cx, cy - int(dp(80)), int(dp(200)), int(dp(44)), "Submit", C.CYAN)
 
     def _draw_reg_downloading(self, w, h):
         cx = w // 2
         cy = h // 2
 
         # Spinner
-        radius = 40
+        radius = int(dp(40))
         for i in range(20):
             a = (self.pulse_phase * 5 + (math.pi * 2 * i / 20)) % (math.pi * 2)
             sx = cx + int(radius * math.cos(a))
-            sy = cy + 40 + int(radius * math.sin(a))
+            sy = cy + int(dp(40)) + int(radius * math.sin(a))
             dot_a = 0.3 + 0.7 * (i / 20)
             Color(*C.CYAN[:3], dot_a)
-            Ellipse(pos=(sx - 3, sy - 3), size=(6, 6))
+            Ellipse(pos=(sx - int(dp(4)), sy - int(dp(4))), size=(int(dp(8)), int(dp(8))))
 
-        self._text("Downloading Audio...", cx - 100, cy - 30, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text(self.download_progress, cx - 150, cy - 60, font_size=sp(22), color=C.TEXT_SEC)
-        self._text("Please wait...", cx - 50, cy - 90, font_size=sp(18), color=C.TEXT_MUTED)
+        self._text("Downloading Audio...", cx - int(dp(140)), cy - int(dp(40)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._text(self.download_progress, cx - int(dp(180)), cy - int(dp(80)), font_size=sp(24), color=C.TEXT_SEC)
+        self._text("Please wait...", cx - int(dp(60)), cy - int(dp(120)), font_size=sp(20), color=C.TEXT_MUTED)
 
     def _draw_reg_pick_file(self, w, h):
         cx = w // 2
-        self._text("Select Audio File", cx - 90, h - 130, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text(f"Folder: {self.config.music_folder}", cx - 180, h - 160, font_size=sp(18), color=C.TEXT_MUTED)
+        cy = h // 2
+        self._text("Select Audio File", cx - int(dp(110)), cy + int(dp(220)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._text(f"Folder: {self.config.music_folder}", cx - int(dp(200)), cy + int(dp(180)), font_size=sp(20), color=C.TEXT_MUTED)
 
         if not self.local_files:
-            self._text("No audio files found in music folder", cx - 150, h // 2, font_size=sp(22), color=C.RED)
+            self._text("No audio files found in music folder", cx - int(dp(180)), cy, font_size=sp(24), color=C.RED)
             return
 
-        list_x = cx - 220
-        list_y = h - 200
-        item_h = 40
+        list_x = cx - int(dp(220))
+        list_y = cy + int(dp(100))
+        item_h = int(dp(50))
         visible = min(10, len(self.local_files) - self.file_scroll)
 
         for i in range(visible):
@@ -1076,128 +1088,102 @@ class UI(FloatLayout):
 
             bg_a = 0.55 if is_sel else 0.24
             Color(*C.GLASS_BG[:3], bg_a)
-            RoundedRectangle(pos=(list_x, iy - item_h + 4), size=(440, item_h - 4), radius=[6])
+            RoundedRectangle(pos=(list_x, iy - item_h + int(dp(4))), size=(int(dp(440)), item_h - int(dp(4))), radius=[2])
 
             border_c = C.CYAN if is_sel else C.VIOLET
             border_a = 0.3 if is_sel else 0.12
             Color(*border_c[:3], border_a)
-            Line(rounded_rectangle=(list_x, iy - item_h + 4, 440, item_h - 4, 6), width=1)
+            Line(rounded_rectangle=(list_x, iy - item_h + int(dp(4)), int(dp(440)), item_h - int(dp(4)), 2), width=1)
 
             ext = os.path.splitext(self.local_files[idx])[1].upper()
-            self._text(ext, list_x + 10, iy - item_h + 14, font_size=sp(18), color=C.CYAN if is_sel else C.TEXT_MUTED)
+            self._text(ext, list_x + int(dp(10)), iy - item_h + int(dp(16)), font_size=sp(20), color=C.CYAN if is_sel else C.TEXT_MUTED)
 
             fname = self.local_files[idx]
-            if len(fname) > 40:
-                fname = fname[:37] + "..."
-            self._text(fname, list_x + 60, iy - item_h + 14, font_size=sp(19), color=C.TEXT if is_sel else C.TEXT_SEC)
-
-        self._text("↑↓ Navigate  •  ENTER select  •  Click to pick", cx - 180, list_y - visible * item_h - 10, font_size=sp(18), color=C.TEXT_MUTED)
+            if len(fname) > 35:
+                fname = fname[:32] + "..."
+            self._text(fname, list_x + int(dp(70)), iy - item_h + int(dp(16)), font_size=sp(22), color=C.TEXT if is_sel else C.TEXT_SEC)
 
     def _draw_reg_confirm(self, w, h):
         cx = w // 2
-        self._text("Confirm Registration", cx - 100, h - 160, font_size=sp(28), color=C.TEXT, bold=True)
+        cy = h // 2
+        self._text("Confirm Registration", cx - int(dp(140)), cy + int(dp(120)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._text(f"UID: {self.scanned_uid}", cx - int(dp(140)), cy + int(dp(70)), font_size=sp(24), color=C.TEXT_SEC)
+        self._text(f"Title: {self.reg_title}", cx - int(dp(140)), cy + int(dp(30)), font_size=sp(24), color=C.TEXT_SEC)
 
-        card_w = min(500, w - 80)
-        card_x = cx - card_w // 2
-        card_y = h // 2 - 40
-
-        Color(*C.GLASS_BG[:3], 0.55)
-        RoundedRectangle(pos=(card_x, card_y), size=(card_w, 160), radius=[12])
-        Color(*C.CYAN[:3], 0.2)
-        Line(rounded_rectangle=(card_x, card_y, card_w, 160, 12), width=1)
-
-        fields = [
-            ("UID", self.scanned_uid or ""),
-            ("TITLE", self.reg_title),
-            ("SOURCE", self.reg_url[:50]),
-            ("TYPE", (self.selected_source or "").upper()),
-        ]
-        fy = card_y + 125
-        for label, value in fields:
-            self._text(label, card_x + 20, fy, font_size=sp(18), color=C.VIOLET, bold=True)
-            self._text(value, card_x + 100, fy, font_size=sp(22), color=C.TEXT)
-            fy -= 34
-
-        # Touch-friendly confirm/cancel buttons
-        btn_y = h // 2 - 100
-        self._draw_reg_button(cx - 80, btn_y, 140, 44, "Confirm", C.GREEN)
-        self._draw_reg_button(cx + 80, btn_y, 140, 44, "Cancel", C.RED)
+        self._draw_reg_button(cx - int(dp(100)), cy - int(dp(100)), int(dp(160)), int(dp(50)), "Confirm", C.CYAN)
+        self._draw_reg_button(cx + int(dp(100)), cy - int(dp(100)), int(dp(160)), int(dp(50)), "Cancel", C.TEXT_SEC)
 
     def _draw_reg_done(self, w, h):
         cx = w // 2
-        cy = h // 2 + 20
+        cy = h // 2
+        Color(*C.GREEN[:3], 0.2)
+        Ellipse(pos=(cx - int(dp(50)), cy + int(dp(60))), size=(int(dp(100)), int(dp(100))))
+        Color(*C.GREEN[:3], 0.8)
+        Line(circle=(cx, cy + int(dp(110)), int(dp(50))), width=3)
+        self._text("✓", cx - int(dp(12)), cy + int(dp(90)), font_size=sp(48), color=C.GREEN, bold=True)
 
-        Color(*C.GREEN[:3], 0.16)
-        Ellipse(pos=(cx - 38, cy - 38), size=(76, 76))
-        Color(*C.GREEN[:3], 0.7)
-        Line(circle=(cx, cy, 38), width=2)
-
-        # Checkmark (two line segments)
-        Color(*C.GREEN)
-        Line(points=[cx - 12, cy - 2, cx - 2, cy - 12, cx + 16, cy + 10], width=2)
-
-        self._text("Card Registered!", cx - 85, cy - 60, font_size=sp(28), color=C.GREEN, bold=True)
-        self._text(self.reg_title, cx - 80, cy - 90, font_size=sp(22), color=C.TEXT)
-        self._draw_reg_button(cx, h // 2 - 100, 260, 44, "Register Another", C.CYAN)
+        self._text("Success!", cx - int(dp(60)), cy - int(dp(10)), font_size=sp(32), color=C.TEXT, bold=True)
+        self._draw_reg_button(cx, cy - int(dp(100)), int(dp(260)), int(dp(50)), "Register Another", C.CYAN)
 
     def _draw_reg_cards_list(self, w, h):
         cx = w // 2
-        self._text("Registered Cards", cx - 85, h - 120, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text(f"{len(self.cards_list)} cards", cx - 30, h - 148, font_size=sp(18), color=C.TEXT_MUTED)
+        cy = h // 2
+        self._text("Registered Cards", cx - int(dp(120)), cy + int(dp(280)), font_size=sp(32), color=C.TEXT, bold=True)
+
+        list_x = cx - int(dp(300))
+        list_y = cy + int(dp(200))
+        item_h = int(dp(60))
 
         if not self.cards_list:
-            self._text("No cards registered yet", cx - 90, h // 2, font_size=sp(22), color=C.TEXT_MUTED)
+            self._text("No cards registered yet", cx - int(dp(120)), cy, font_size=sp(24), color=C.TEXT_MUTED)
             return
 
-        list_x = cx - 280
-        list_y = h - 180
-        item_h = 48
         visible = min(9, len(self.cards_list) - self.cards_scroll)
-
         for i in range(visible):
             idx = self.cards_scroll + i
             if idx >= len(self.cards_list):
                 break
-            card = self.cards_list[idx]
             iy = list_y - i * item_h
+            card = self.cards_list[idx]
 
-            Color(*C.GLASS_BG[:3], 0.31)
-            RoundedRectangle(pos=(list_x, iy - item_h + 4), size=(560, item_h - 4), radius=[6])
-            Color(*C.VIOLET[:3], 0.1)
-            Line(rounded_rectangle=(list_x, iy - item_h + 4, 560, item_h - 4, 6), width=1)
+            Color(*C.GLASS_BG[:3], 0.4)
+            RoundedRectangle(pos=(list_x, iy - item_h + int(dp(4))), size=(int(dp(600)), item_h - int(dp(4))), radius=[4])
+            Color(1, 1, 1, 0.1)
+            Line(rounded_rectangle=(list_x, iy - item_h + int(dp(4)), int(dp(600)), item_h - int(dp(4)), 4), width=1)
 
-            self._text(card["uid"][:12], list_x + 10, iy - item_h + 16, font_size=sp(18), color=C.CYAN)
+            uid_str = card["uid"][:8] + ".."
+            self._text(uid_str, list_x + int(dp(10)), iy - item_h + int(dp(20)), font_size=sp(20), color=C.CYAN)
 
-            title_text = card["title"]
+            title_text = card.get("title", "Unknown")
             if len(title_text) > 28:
                 title_text = title_text[:25] + "..."
-            self._text(title_text, list_x + 140, iy - item_h + 16, font_size=sp(22), color=C.TEXT)
+            self._text(title_text, list_x + int(dp(140)), iy - item_h + int(dp(20)), font_size=sp(24), color=C.TEXT)
 
             is_url = card["url"].startswith("http")
             src = "YT" if is_url else "LOCAL"
             src_c = C.CYAN if is_url else C.VIOLET
-            self._text(src, list_x + 460, iy - item_h + 16, font_size=sp(18), color=src_c)
+            self._text(src, list_x + int(dp(460)), iy - item_h + int(dp(20)), font_size=sp(20), color=src_c)
 
             # Delete button
-            dx = list_x + 520
-            dy = iy - item_h + 10
+            dx = list_x + int(dp(540))
+            dy = iy - item_h + int(dp(12))
             Color(*C.RED[:3], 0.2)
-            RoundedRectangle(pos=(dx, dy), size=(32, 28), radius=[4])
+            RoundedRectangle(pos=(dx, dy), size=(int(dp(40)), int(dp(36))), radius=[4])
             Color(*C.RED[:3], 0.6)
-            Line(rounded_rectangle=(dx, dy, 32, 28, 4), width=1)
-            self._text("X", dx + 10, dy + 5, font_size=sp(20), color=C.RED, bold=True)
+            Line(rounded_rectangle=(dx, dy, int(dp(40)), int(dp(36)), 4), width=1)
+            self._text("X", dx + int(dp(12)), dy + int(dp(6)), font_size=sp(24), color=C.RED, bold=True)
 
     def _draw_reg_button(self, cx, cy, bw, bh, text, color):
         bx = cx - bw // 2
         by = cy - bh // 2
-        Color(*C.GLASS_BG[:3], 0.55)
-        RoundedRectangle(pos=(bx, by), size=(bw, bh), radius=[10])
-        Color(*color[:3], 0.4)
-        Line(rounded_rectangle=(bx, by, bw, bh, 10), width=1)
+        Color(*C.GLASS_BG[:3], 0.7)
+        RoundedRectangle(pos=(bx, by), size=(bw, bh), radius=[4])
+        Color(*color[:3], 0.6)
+        Line(rounded_rectangle=(bx, by, bw, bh, 4), width=1.5)
         # Top highlight
-        Color(*color[:3], 0.15)
-        Rectangle(pos=(bx, by + bh - 1), size=(bw, 1))
-        self._text(text, cx - len(text) * 5, cy - 8, font_size=sp(20), color=color, bold=True)
+        Color(*color[:3], 0.3)
+        Rectangle(pos=(bx, by + bh - int(dp(2))), size=(bw, int(dp(2))))
+        self._text(text, cx - len(text) * int(dp(5)), cy - int(dp(12)), font_size=sp(22), color=color, bold=True)
 
     def _hit_btn(self, cx, cy, bw, bh, mx, my):
         bx = cx - bw // 2
