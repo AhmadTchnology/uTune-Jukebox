@@ -51,7 +51,7 @@ class JukeboxApp(App):
         self.ui = UI(config, self.queue_mgr, self.player, on_scan=on_rfid_scan)
 
         # RFID reader for desktop/serial modes
-        self.reader = RFIDReader(callback=on_rfid_scan)
+        self.reader = RFIDReader(callback=self.ui.handle_scan)
         self.reader.start()
 
         # Keyboard event binding for UI (USB OTG keyboard readers)
