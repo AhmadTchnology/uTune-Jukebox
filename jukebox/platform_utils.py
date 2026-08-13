@@ -49,10 +49,9 @@ def get_subprocess_flags():
 def request_android_permissions(callback=None):
     """Request runtime permissions on Android 6+.
 
-    Must be called AFTER the Activity is fully created (use Clock.schedule_once).
-    NFC is an install-time permission (declared in manifest), not runtime.
-    INTERNET is also install-time. But we request WRITE/READ_EXTERNAL_STORAGE
-    for music file access on older Android versions.
+    NFC and INTERNET are 'normal' permissions — auto-granted at install time.
+    BLUETOOTH_CONNECT only exists on API 31+ (Android 12).
+    READ_MEDIA_AUDIO/IMAGES replace READ_EXTERNAL_STORAGE on API 33+ (Android 13).
     """
     if not is_android():
         if callback:
@@ -60,23 +59,33 @@ def request_android_permissions(callback=None):
         return
     try:
         from android.permissions import request_permissions, Permission
-        perms = [
-            Permission.INTERNET,
-            Permission.WRITE_EXTERNAL_STORAGE,
-            Permission.READ_EXTERNAL_STORAGE,
-            "android.permission.NFC",
-            "android.permission.BLUETOOTH_CONNECT"
-        ]
-        # For Android 13+ (API 33+) we need these instead of READ_EXTERNAL_STORAGE
-        try:
-            perms.extend([Permission.READ_MEDIA_AUDIO, Permission.READ_MEDIA_IMAGES])
-        except AttributeError:
-            pass # Older android.permissions API doesn't have these constants yet
+        from jnius import autoclass
+
+        Build = autoclass('android.os.Build$VERSION')
+        sdk_int = Build.SDK_INT
+
+        perms = []
+
+        if sdk_int >= 33:
+            # Android 13+: granular media permissions
+            perms.append("android.permission.READ_MEDIA_AUDIO")
+            perms.append("android.permission.READ_MEDIA_IMAGES")
+        else:
+            # Android 12 and below: legacy storage
+            perms.append(Permission.WRITE_EXTERNAL_STORAGE)
+            perms.append(Permission.READ_EXTERNAL_STORAGE)
+
+        if sdk_int >= 31:
+            # Android 12+: new Bluetooth permissions
+            perms.append("android.permission.BLUETOOTH_CONNECT")
 
         request_permissions(perms, callback)
-        print(f"[Platform] Requested permissions: {perms}")
+        print(f"[Platform] SDK={sdk_int}, requesting: {perms}")
     except Exception as e:
         print(f"[Platform] Permission request error: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 
 def get_dpi_scale():

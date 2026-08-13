@@ -7,7 +7,8 @@ from platform_utils import is_android
 class RFIDReader:
     """RFID reader supporting built-in Android NFC, USB OTG keyboard, and serial modes.
 
-    On Android tablets, built-in NFC is handled via Intent tracking using pyjnius.
+    On Android tablets, built-in NFC is handled via enableReaderMode (API 19+)
+    with a PythonJavaClass callback — no Intents needed.
     Keyboard emulation mode captures keystrokes in the Kivy UI layer.
     """
 
@@ -19,12 +20,11 @@ class RFIDReader:
         self.last_read_time = 0
         self.running = False
         self.thread = None
-        
+
         # For Android NFC
         self._nfc_adapter = None
-        self._current_activity = None
-        self._pending_intent = None
-        self._intent_filters = None
+        self._activity = None
+        self._reader_callback = None
 
     def start(self):
         self.running = True
@@ -39,7 +39,7 @@ class RFIDReader:
     def stop(self):
         self.running = False
         if self.mode == "nfc_android" and is_android():
-            self.disable_nfc_foreground()
+            self.disable_nfc_reader_mode()
 
     def on_uid_scanned(self, uid):
         """Called by the UI layer when a keyboard-emulated UID is received."""
@@ -74,89 +74,102 @@ class RFIDReader:
         except Exception as e:
             print(f"[RFID] Failed to open serial port: {e}")
 
-    # ── Android built-in NFC ─────────────────────────────────────────────────
+    # ── Android built-in NFC (Reader Mode API) ──────────────────────────────
     def _setup_android_nfc(self):
+        """Use enableReaderMode — the modern, reliable NFC API.
+
+        Unlike enableForegroundDispatch (Intent-based), this directly invokes
+        a callback when a tag is discovered. Works reliably on Kivy/p4a.
+        """
         try:
-            from jnius import autoclass, cast
-            import android
-            
-            # Needed classes
+            from jnius import autoclass, PythonJavaClass, java_method
+            from kivy.clock import Clock
+
             NfcAdapter = autoclass('android.nfc.NfcAdapter')
-            Intent = autoclass('android.content.Intent')
-            PendingIntent = autoclass('android.app.PendingIntent')
-            IntentFilter = autoclass('android.content.IntentFilter')
             PythonActivity = autoclass('org.kivy.android.PythonActivity')
-            
-            self._current_activity = cast('android.app.Activity', PythonActivity.mActivity)
-            self._nfc_adapter = NfcAdapter.getDefaultAdapter(self._current_activity)
-            
+
+            self._activity = PythonActivity.mActivity
+            self._nfc_adapter = NfcAdapter.getDefaultAdapter(self._activity)
+
             if not self._nfc_adapter:
-                print("[RFID] No NFC adapter found on this Android device.")
+                print("[RFID] No NFC adapter found on this device.")
                 return
-                
-            # Create a pending intent
-            intent = Intent(self._current_activity, self._current_activity.getClass())
-            intent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
+            if not self._nfc_adapter.isEnabled():
+                print("[RFID] NFC adapter is disabled. Please enable NFC in Settings.")
+                return
+
+            # Create the ReaderCallback as a PythonJavaClass
+            reader = self
             
-            # Use FLAG_MUTABLE (33554432) for Android 12+ compatibility if needed, or 0
-            # PendingIntent.FLAG_MUTABLE = 33554432
-            self._pending_intent = PendingIntent.getActivity(self._current_activity, 0, intent, 33554432)
-            
-            # Intent filters for NFC tags
-            filter_tag = IntentFilter("android.nfc.action.TAG_DISCOVERED")
-            filter_ndef = IntentFilter("android.nfc.action.NDEF_DISCOVERED")
-            filter_tech = IntentFilter("android.nfc.action.TECH_DISCOVERED")
-            
-            self._intent_filters = [filter_tag, filter_ndef, filter_tech]
-            
-            # Bind to Kivy Activity's on_new_intent event
-            android.activity.bind(on_new_intent=self._on_new_intent)
-            
-            print("[RFID] Android NFC adapter initialized successfully.")
-            self.enable_nfc_foreground()
-            
+            class NfcReaderCallback(PythonJavaClass):
+                __javainterfaces__ = ['android/nfc/NfcAdapter$ReaderCallback']
+                __javacontext__ = 'app'
+
+                @java_method('(Landroid/nfc/Tag;)V')
+                def onTagDiscovered(self, tag):
+                    try:
+                        tag_id = tag.getId()
+                        # Convert Java byte[] to hex string
+                        uid_hex = "".join([f"{b & 0xFF:02x}" for b in tag_id])
+                        print(f"[RFID] NFC tag discovered: {uid_hex}")
+                        # Schedule on main thread for thread safety
+                        Clock.schedule_once(lambda dt: reader._process_uid(uid_hex), 0)
+                    except Exception as e:
+                        print(f"[RFID] Error reading NFC tag: {e}")
+
+            self._reader_callback = NfcReaderCallback()
+
+            print("[RFID] Android NFC adapter initialized. Enabling reader mode...")
+            self.enable_nfc_reader_mode()
+
         except Exception as e:
             print(f"[RFID] Failed to setup Android NFC: {e}")
-            
-    def _on_new_intent(self, intent):
-        try:
-            action = intent.getAction()
-            print(f"[RFID] Received Android intent: {action}")
-            if action in (
-                "android.nfc.action.TAG_DISCOVERED",
-                "android.nfc.action.NDEF_DISCOVERED",
-                "android.nfc.action.TECH_DISCOVERED"
-            ):
-                from jnius import autoclass, cast
-                NfcAdapter = autoclass('android.nfc.NfcAdapter')
-                tag = cast('android.nfc.Tag', intent.getParcelableExtra(NfcAdapter.EXTRA_TAG))
-                
-                if tag:
-                    tag_id = tag.getId()
-                    # Convert java byte array to hex string
-                    uid_hex = "".join([f"{b & 0xFF:02x}" for b in tag_id])
-                    print(f"[RFID] Read native NFC tag: {uid_hex}")
-                    self._process_uid(uid_hex)
-        except Exception as e:
-            print(f"[RFID] Error handling new NFC intent: {e}")
+            import traceback
+            traceback.print_exc()
 
+    def enable_nfc_reader_mode(self):
+        """Enable NFC Reader Mode to detect all tag types."""
+        if not self._nfc_adapter or not self._activity or not self._reader_callback:
+            return
+        try:
+            from jnius import autoclass
+            NfcAdapter = autoclass('android.nfc.NfcAdapter')
+
+            # Combine flags for all common tag types + skip NDEF parsing
+            flags = (
+                NfcAdapter.FLAG_READER_NFC_A
+                | NfcAdapter.FLAG_READER_NFC_B
+                | NfcAdapter.FLAG_READER_NFC_F
+                | NfcAdapter.FLAG_READER_NFC_V
+                | NfcAdapter.FLAG_READER_NFC_BARCODE
+                | NfcAdapter.FLAG_READER_SKIP_NDEF_CHECK
+                | NfcAdapter.FLAG_READER_NO_PLATFORM_SOUNDS
+            )
+
+            self._nfc_adapter.enableReaderMode(
+                self._activity,
+                self._reader_callback,
+                flags,
+                None,  # No extras Bundle needed
+            )
+            print("[RFID] NFC reader mode enabled successfully.")
+        except Exception as e:
+            print(f"[RFID] Failed to enable NFC reader mode: {e}")
+
+    def disable_nfc_reader_mode(self):
+        """Disable NFC Reader Mode (call on pause/stop)."""
+        if not self._nfc_adapter or not self._activity:
+            return
+        try:
+            self._nfc_adapter.disableReaderMode(self._activity)
+            print("[RFID] NFC reader mode disabled.")
+        except Exception as e:
+            print(f"[RFID] Failed to disable NFC reader mode: {e}")
+
+    # Keep legacy names for main.py on_pause/on_resume compatibility
     def enable_nfc_foreground(self):
-        if self._nfc_adapter and self._current_activity and self._pending_intent:
-            try:
-                print("[RFID] Enabling NFC foreground dispatch...")
-                self._nfc_adapter.enableForegroundDispatch(
-                    self._current_activity, 
-                    self._pending_intent, 
-                    self._intent_filters, 
-                    None
-                )
-            except Exception as e:
-                print(f"[RFID] Failed to enable NFC foreground dispatch: {e}")
+        self.enable_nfc_reader_mode()
 
     def disable_nfc_foreground(self):
-        if self._nfc_adapter and self._current_activity:
-            try:
-                print("[RFID] Disabling NFC foreground dispatch...")
-                self._nfc_adapter.disableForegroundDispatch(self._current_activity)
-            except Exception as e:
-                print(f"[RFID] Failed to disable NFC foreground dispatch: {e}")
+        self.disable_nfc_reader_mode()
