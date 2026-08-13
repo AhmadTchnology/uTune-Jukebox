@@ -502,19 +502,35 @@ class UI(FloatLayout):
         info_w = w - (info_x - x)
 
         title = track.get("title", "Unknown Track")
-        if len(title) > 30:
-            title = title[:27] + "..."
         
+        # word wrap title manually
+        words = title.split(' ')
+        lines = []
+        cur_line = ""
+        for w in words:
+            if len(cur_line) + len(w) > 28:
+                lines.append(cur_line.strip())
+                cur_line = w + " "
+            else:
+                cur_line += w + " "
+        lines.append(cur_line.strip())
+        
+        # Max 2 lines
+        lines = lines[:2]
+        if len(lines) > 1 and len(lines[1]) > 28:
+            lines[1] = lines[1][:25] + "..."
+            
         # Vertically align info with the art
         info_top = art_y + art_size - int(dp(16))
         
-        self._text(title, info_x, info_top, font_size=sp(28), color=C.TEXT, bold=True)
+        for i, line in enumerate(lines):
+            self._text(line, info_x, info_top - i * int(dp(32)), font_size=sp(28), color=C.TEXT, bold=True)
         
         artist = track.get("artist", "Unknown Artist")
-        self._text(artist, info_x, info_top - int(dp(40)), font_size=sp(22), color=C.TEXT_SEC)
+        self._text(artist, info_x, info_top - len(lines) * int(dp(32)) - int(dp(8)), font_size=sp(22), color=C.TEXT_SEC)
 
         album = track.get("album", "")
-        offset = int(dp(84))
+        offset = len(lines) * int(dp(32)) + int(dp(52))
         if album:
             self._text(album.upper(), info_x, info_top - offset, font_size=sp(16), color=C.TEXT_MUTED)
             offset += int(dp(24))
@@ -601,10 +617,10 @@ class UI(FloatLayout):
             Color(*C.CYAN[:3], 0.4)
             Ellipse(pos=(x + fill_w - dot_sz, y + bar_h // 2 - dot_sz), size=(dot_sz*2, dot_sz*2))
 
-        # Time labels
+        # Time labels below the bar
         mins, secs = int(elapsed) // 60, int(elapsed) % 60
         self._text(
-            f"{mins}:{secs:02d}", x, y + int(dp(16)),
+            f"{mins}:{secs:02d}", x, y - int(dp(22)),
             font_size=sp(16), color=_rgba(C.CYAN, 0.8),
         )
         if duration:
@@ -612,7 +628,7 @@ class UI(FloatLayout):
             dm, ds = int(dur) // 60, int(dur) % 60
             # Right align duration
             self._text(
-                f"{dm}:{ds:02d}", x + w - int(dp(36)), y + int(dp(16)),
+                f"{dm}:{ds:02d}", x + w - int(dp(36)), y - int(dp(22)),
                 font_size=sp(16), color=C.TEXT_MUTED,
             )
 
@@ -944,9 +960,9 @@ class UI(FloatLayout):
             text=preset,
             multiline=False,
             size_hint=(None, None),
-            size=(min(700, self.width - 100), int(dp(54))),
-            pos=(self.width // 2 - min(350, (self.width - 100) // 2), self.height // 2 - int(dp(27))),
-            font_size=sp(24),
+            size=(min(700, self.width - 100), int(dp(60))),
+            pos_hint={'center_x': 0.5, 'center_y': 0.5},
+            font_size=sp(28),
             background_color=(C.GLASS_BG[0], C.GLASS_BG[1], C.GLASS_BG[2], 0.9),
             foreground_color=C.TEXT,
             cursor_color=C.CYAN,
@@ -1190,6 +1206,9 @@ class UI(FloatLayout):
         file_path = os.path.join(self.config.music_folder, filename)
         base_path = os.path.splitext(file_path)[0]
         json_path = base_path + ".info.json"
+        if not os.path.exists(json_path):
+            json_path = base_path + ".json"
+            
         if os.path.exists(json_path):
             try:
                 with open(json_path, "r", encoding="utf-8") as f:

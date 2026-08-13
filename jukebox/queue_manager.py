@@ -39,6 +39,9 @@ class JukeboxQueue:
 
             base_path = os.path.splitext(file_path)[0]
             json_path = base_path + ".info.json"
+            if not os.path.exists(json_path):
+                json_path = base_path + ".json"
+            
             if os.path.exists(json_path):
                 try:
                     with open(json_path, "r", encoding="utf-8") as f:
