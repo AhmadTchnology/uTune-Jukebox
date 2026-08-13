@@ -64,6 +64,9 @@ class C:
     TEXT_MUTED   = _c(71, 85, 105)
     TEXT_SLATE   = _c(226, 232, 240)
     TEXT_DIM     = _c(100, 116, 139)
+    RED          = _c(239, 68, 68)
+    GREEN        = _c(34, 197, 94)
+    ORANGE       = _c(251, 146, 60)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -781,14 +784,16 @@ class UI(FloatLayout):
     # ── registration UI & logic ──
 
     def on_touch_down(self, touch):
-        # Convert to local coordinates just in case
+        # Let the text input handle its own touches first
+        if self._text_input:
+            if self._text_input.collide_point(touch.x, touch.y):
+                return super().on_touch_down(touch)
+
         mx, my = self.to_local(touch.x, touch.y)
-        
+
         if self.page == "player":
             bar_h = int(dp(40))
             cy = bar_h // 2
-            
-            # Use hit_btn with enlarged hitboxes for easier touch
             hit_h = int(dp(60))
             if self._hit_btn(int(dp(60)), cy, int(dp(90)), hit_h, mx, my):
                 self.player.skip()
@@ -802,11 +807,23 @@ class UI(FloatLayout):
                 from kivy.app import App
                 App.get_running_app().stop()
                 return True
-                
             return super().on_touch_down(touch)
-            
+
+        # ── Registration page touch handling ──
         w, h = self.width, self.height
         cx = w // 2
+
+        # Back button (top-right on all reg sub-screens except home)
+        back_x = w - 120
+        back_y = h - 60
+        if self._hit_btn(back_x, back_y, 100, 36, mx, my):
+            if self.reg_state in (REG_STATE_HOME, REG_STATE_DONE):
+                self.page = "player"
+                self._remove_text_input()
+            else:
+                self._reset_reg()
+                self.reg_state = REG_STATE_HOME
+            return True
 
         if self.reg_state == REG_STATE_HOME:
             if self._hit_btn(cx, h - 280, 260, 50, mx, my):
@@ -829,6 +846,13 @@ class UI(FloatLayout):
                 self.reg_state = REG_STATE_PICK_FILE
                 return True
 
+        elif self.reg_state in (REG_STATE_INPUT_URL, REG_STATE_INPUT_TITLE):
+            # Submit button
+            btn_y = h // 2 - 80
+            if self._hit_btn(cx, btn_y, 200, 44, mx, my):
+                self._submit_text_input()
+                return True
+
         elif self.reg_state == REG_STATE_PICK_FILE:
             list_x = cx - 220
             list_y_start = h - 200
@@ -846,6 +870,24 @@ class UI(FloatLayout):
                     self.reg_state = REG_STATE_INPUT_TITLE
                     self._show_text_input("Enter Song Title:", preset)
                     return True
+
+        elif self.reg_state == REG_STATE_CONFIRM:
+            # Confirm button
+            if self._hit_btn(cx - 80, h // 2 - 100, 140, 44, mx, my):
+                self._do_confirm_register()
+                return True
+            # Cancel button
+            if self._hit_btn(cx + 80, h // 2 - 100, 140, 44, mx, my):
+                self._reset_reg()
+                self.reg_state = REG_STATE_HOME
+                return True
+
+        elif self.reg_state == REG_STATE_DONE:
+            # "Register Another" button
+            if self._hit_btn(cx, h // 2 - 100, 260, 44, mx, my):
+                self._reset_reg()
+                self.reg_state = REG_STATE_HOME
+                return True
 
         elif self.reg_state == REG_STATE_LIST:
             list_x = cx - 280
@@ -909,6 +951,29 @@ class UI(FloatLayout):
             self.remove_widget(self._text_input)
             self._text_input = None
 
+    def _submit_text_input(self):
+        """Submit the current text input (touch-friendly alternative to Enter key)."""
+        text = self._get_input_text()
+        if not text.strip():
+            return
+        if self.reg_state == REG_STATE_INPUT_URL:
+            url = text.strip()
+            self._remove_text_input()
+            self.reg_state = REG_STATE_DOWNLOADING
+            threading.Thread(target=self._download_youtube, args=(url,), daemon=True).start()
+        elif self.reg_state == REG_STATE_INPUT_TITLE:
+            self.reg_title = text.strip()
+            self._remove_text_input()
+            self.reg_state = REG_STATE_CONFIRM
+
+    def _do_confirm_register(self):
+        """Perform the card registration."""
+        from registry import Registry
+        registry = Registry(self.config.db_path)
+        registry.register_card(self.scanned_uid, self.reg_title, self.reg_url)
+        self.show_toast(f"Registered: {self.reg_title}")
+        self.reg_state = REG_STATE_DONE
+
     def _reset_reg(self):
         self.scanned_uid = None
         self.existing_card = None
@@ -922,6 +987,9 @@ class UI(FloatLayout):
         self._text("CARD REGISTRATION", 160, h - 42, font_size=sp(18), color=_rgba(C.VIOLET, 0.7), bold=True)
         Color(1, 1, 1, 0.08)
         Rectangle(pos=(28, h - 70), size=(w - 56, 1))
+        # Back / Exit button (top-right)
+        label = "← Player" if self.reg_state in (REG_STATE_HOME, REG_STATE_DONE) else "← Back"
+        self._draw_reg_button(w - 120, h - 60, 100, 36, label, C.TEXT_SEC)
 
     def _draw_reg_home(self, w, h):
         cx = w // 2
@@ -965,7 +1033,9 @@ class UI(FloatLayout):
     def _draw_reg_input_screen(self, w, h, label):
         cx = w // 2
         self._text(label, cx - 100, h - 170, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text("Press ENTER to confirm  •  ESC to cancel", cx - 170, h // 2 - 60, font_size=sp(18), color=C.TEXT_MUTED)
+        self._text("Type below, then tap Submit or press ENTER", cx - 180, h // 2 - 50, font_size=sp(18), color=C.TEXT_MUTED)
+        # Submit button below the text input
+        self._draw_reg_button(cx, h // 2 - 80, 200, 44, "Submit", C.CYAN)
 
     def _draw_reg_downloading(self, w, h):
         cx = w // 2
@@ -988,7 +1058,7 @@ class UI(FloatLayout):
     def _draw_reg_pick_file(self, w, h):
         cx = w // 2
         self._text("Select Audio File", cx - 90, h - 130, font_size=sp(28), color=C.TEXT, bold=True)
-        self._text(f"Folder: {config.music_folder}", cx - 180, h - 160, font_size=sp(18), color=C.TEXT_MUTED)
+        self._text(f"Folder: {self.config.music_folder}", cx - 180, h - 160, font_size=sp(18), color=C.TEXT_MUTED)
 
         if not self.local_files:
             self._text("No audio files found in music folder", cx - 150, h // 2, font_size=sp(22), color=C.RED)
@@ -1048,7 +1118,10 @@ class UI(FloatLayout):
             self._text(value, card_x + 100, fy, font_size=sp(22), color=C.TEXT)
             fy -= 34
 
-        self._text("Press Y or ENTER to confirm  •  N to cancel", cx - 180, card_y - 30, font_size=sp(22), color=C.TEXT_SEC)
+        # Touch-friendly confirm/cancel buttons
+        btn_y = h // 2 - 100
+        self._draw_reg_button(cx - 80, btn_y, 140, 44, "Confirm", C.GREEN)
+        self._draw_reg_button(cx + 80, btn_y, 140, 44, "Cancel", C.RED)
 
     def _draw_reg_done(self, w, h):
         cx = w // 2
@@ -1065,7 +1138,7 @@ class UI(FloatLayout):
 
         self._text("Card Registered!", cx - 85, cy - 60, font_size=sp(28), color=C.GREEN, bold=True)
         self._text(self.reg_title, cx - 80, cy - 90, font_size=sp(22), color=C.TEXT)
-        self._text("Press ENTER to register another  •  ESC to exit", cx - 200, cy - 130, font_size=sp(18), color=C.TEXT_MUTED)
+        self._draw_reg_button(cx, h // 2 - 100, 260, 44, "Register Another", C.CYAN)
 
     def _draw_reg_cards_list(self, w, h):
         cx = w // 2
@@ -1132,7 +1205,7 @@ class UI(FloatLayout):
         return bx < mx < bx + bw and by < my < by + bh
 
     def _scan_local_files(self):
-        folder = config.music_folder
+        folder = self.config.music_folder
         if not os.path.isdir(folder):
             self.local_files = []
             return
@@ -1146,7 +1219,7 @@ class UI(FloatLayout):
     def _load_cards_list(self):
         import sqlite3
         try:
-            with sqlite3.connect(self.registry.db_path) as conn:
+            with sqlite3.connect(self.config.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT uid, title, youtube_url FROM cards ORDER BY date_added DESC")
                 self.cards_list = [
@@ -1159,7 +1232,7 @@ class UI(FloatLayout):
     def _card_count(self):
         import sqlite3
         try:
-            with sqlite3.connect(self.registry.db_path) as conn:
+            with sqlite3.connect(self.config.db_path) as conn:
                 return conn.cursor().execute("SELECT COUNT(*) FROM cards").fetchone()[0]
         except Exception:
             return 0
@@ -1169,7 +1242,7 @@ class UI(FloatLayout):
         import shutil
         import json
 
-        file_path = os.path.join(config.music_folder, filename)
+        file_path = os.path.join(self.config.music_folder, filename)
         base_path = os.path.splitext(file_path)[0]
         json_path = base_path + ".info.json"
         if os.path.exists(json_path):
@@ -1205,51 +1278,53 @@ class UI(FloatLayout):
         return None
 
     def _download_youtube(self, url):
-        import subprocess
-        import shutil
+        import yt_dlp
 
         self.download_progress = "Starting download..."
-        ytdlp = shutil.which("yt-dlp") or "yt-dlp"
-
-        music_dir = config.music_folder
+        music_dir = self.config.music_folder
         os.makedirs(music_dir, exist_ok=True)
         before = set(os.listdir(music_dir))
 
-        cmd = [
-            ytdlp,
-            "-f", "bestaudio/best",
-            "--no-playlist",
-            "--write-thumbnail",
-            "--write-info-json",
-            "-o", os.path.join(music_dir, "%(title)s.%(ext)s"),
-            url,
-        ]
+        def progress_hook(d):
+            if d['status'] == 'downloading':
+                pct = d.get('_percent_str', '').strip()
+                eta = d.get('_eta_str', '').strip()
+                self.download_progress = f"Downloading... {pct} (ETA: {eta})"
+            elif d['status'] == 'finished':
+                self.download_progress = "Download complete, processing..."
 
-        cookies_file = config.ytdlp_cookies_file
-        cookies_browser = config.ytdlp_cookies_browser
+        class Logger:
+            def __init__(self, parent):
+                self.parent = parent
+            def debug(self, msg): pass
+            def info(self, msg):
+                if not msg.startswith('[download]'):
+                    self.parent.download_progress = "Fetching metadata..."
+            def warning(self, msg): pass
+            def error(self, msg): pass
+
+        ydl_opts = {
+            'format': 'bestaudio/best',
+            'noplaylist': True,
+            'writethumbnail': True,
+            'writeinfojson': True,
+            'outtmpl': os.path.join(music_dir, '%(title)s.%(ext)s'),
+            'logger': Logger(self),
+            'progress_hooks': [progress_hook],
+            'noprogress': True,
+            'quiet': True,
+        }
+
+        cookies_file = self.config.ytdlp_cookies_file
+        cookies_browser = self.config.ytdlp_cookies_browser
         if cookies_file and os.path.exists(cookies_file):
-            cmd.extend(["--cookies", cookies_file])
+            ydl_opts['cookiefile'] = cookies_file
         elif cookies_browser:
-            cmd.extend(["--cookies-from-browser", cookies_browser])
+            ydl_opts['cookiesfrombrowser'] = (cookies_browser,)
 
         try:
-            proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                text=True, encoding="utf-8", errors="replace",
-                **get_subprocess_flags(),
-            )
-            for line in iter(proc.stdout.readline, ""):
-                line = line.strip()
-                if not line:
-                    continue
-                if line.startswith("[download]"):
-                    self.download_progress = line[:60]
-                elif line.startswith("[info]"):
-                    self.download_progress = "Fetching metadata..."
-                else:
-                    self.download_progress = "Processing..."
-
-            proc.wait()
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
 
             after = set(os.listdir(music_dir))
             new_files = after - before
