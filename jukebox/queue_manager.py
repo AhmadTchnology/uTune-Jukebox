@@ -37,10 +37,12 @@ class JukeboxQueue:
             if not os.path.isabs(file_path) and not file_path.startswith("http"):
                 file_path = os.path.join(config.music_folder, file_path)
 
-            base_path = os.path.splitext(file_path)[0]
-            json_path = base_path + ".info.json"
+            json_path = file_path + ".info.json"
             if not os.path.exists(json_path):
-                json_path = base_path + ".json"
+                base_path = os.path.splitext(file_path)[0]
+                json_path = base_path + ".info.json"
+                if not os.path.exists(json_path):
+                    json_path = base_path + ".json"
             
             if os.path.exists(json_path):
                 try:
@@ -56,8 +58,11 @@ class JukeboxQueue:
                 except Exception:
                     pass
 
+            base_path = os.path.splitext(file_path)[0]
             for ext in [".webp", ".jpg", ".png", ".jpeg"]:
-                img_path = base_path + ext
+                img_path = file_path + ext
+                if not os.path.exists(img_path):
+                    img_path = base_path + ext
                 if os.path.exists(img_path) and "image_bytes" not in item:
                     try:
                         with open(img_path, "rb") as f:
