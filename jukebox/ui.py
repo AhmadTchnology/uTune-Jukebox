@@ -177,7 +177,7 @@ class UI(FloatLayout):
         self.status_end = _time.time() + 5
 
     # ── keyboard (RFID via USB OTG keyboard emulation) ───────────────────────
-    def handle_key_down(self, key, scancode, codepoint, modifiers):
+    def handle_key_down(self, window, key, scancode, codepoint, modifiers):
         """Called from the Kivy App's on_key_down."""
         if key == 27:  # ESC
             return False  # Let App handle quit
@@ -281,7 +281,7 @@ class UI(FloatLayout):
         Ellipse(pos=(x, label_y - 2), size=(6, 6))
         self._text(
             "NOW PLAYING", x + 14, label_y,
-            font_size=14, color=_rgba(C.CYAN, 0.75), bold=True, font_name="RobotoMono",
+            font_size=14, color=_rgba(C.CYAN, 0.75), bold=True,
         )
 
         if track:
@@ -311,7 +311,7 @@ class UI(FloatLayout):
         album = track.get("album", "")
         offset = 85
         if album:
-            self._text(album.upper(), info_x, top_y - offset, font_size=13, color=C.TEXT_MUTED, font_name="RobotoMono")
+            self._text(album.upper(), info_x, top_y - offset, font_size=13, color=C.TEXT_MUTED)
             offset += 30
 
         # Progress bar
@@ -370,7 +370,7 @@ class UI(FloatLayout):
             pulse_x = int((w - pulse_w) * ((math.sin(self.pulse_phase * 3) + 1) / 2))
             Color(*C.CYAN)
             Rectangle(pos=(x + pulse_x, y), size=(pulse_w, bar_h))
-            self._text("Loading...", x, y - 24, font_size=18, color=C.CYAN, font_name="RobotoMono")
+            self._text("Loading...", x, y - 24, font_size=18, color=C.CYAN)
             return
 
         elapsed = _time.time() - self.player.play_start_time
@@ -390,14 +390,14 @@ class UI(FloatLayout):
         mins, secs = int(elapsed) // 60, int(elapsed) % 60
         self._text(
             f"{mins}:{secs:02d}", x, y - 24,
-            font_size=18, color=_rgba(C.CYAN, 0.7), font_name="RobotoMono",
+            font_size=18, color=_rgba(C.CYAN, 0.7),
         )
         if duration:
             dur = float(duration)
             dm, ds = int(dur) // 60, int(dur) % 60
             self._text(
                 f"{dm}:{ds:02d}", x + w - 50, y - 24,
-                font_size=18, color=C.TEXT_MUTED, font_name="RobotoMono",
+                font_size=18, color=C.TEXT_MUTED,
             )
 
     def _draw_idle(self, x, y_pad, w, h):
@@ -443,7 +443,7 @@ class UI(FloatLayout):
     def _draw_queue(self, x, y_pad, w, h):
         top = h - y_pad
         Color(*C.VIOLET[:3], 0.75)
-        self._text("UP NEXT", x, top - 20, font_size=14, color=_rgba(C.VIOLET, 0.75), bold=True, font_name="RobotoMono")
+        self._text("UP NEXT", x, top - 20, font_size=14, color=_rgba(C.VIOLET, 0.75), bold=True)
 
         upcoming = self.queue_mgr.get_upcoming()
 
@@ -529,8 +529,8 @@ class UI(FloatLayout):
         Rectangle(pos=(0, bar_h), size=(w, 1))
 
         # Hints
-        self._text("[S] Skip", 28, bar_h // 2 - 6, font_size=13, color=C.TEXT_MUTED, font_name="RobotoMono")
-        self._text("[ESC] Quit", 120, bar_h // 2 - 6, font_size=13, color=C.TEXT_MUTED, font_name="RobotoMono")
+        self._text("[S] Skip", 28, bar_h // 2 - 6, font_size=13, color=C.TEXT_MUTED)
+        self._text("[ESC] Quit", 120, bar_h // 2 - 6, font_size=13, color=C.TEXT_MUTED)
 
         # LIVE badge (right side)
         live_w, live_h = 56, 22
@@ -547,13 +547,13 @@ class UI(FloatLayout):
         Color(*C.CYAN[:3], dot_a)
         Ellipse(pos=(live_x + 7, live_y + live_h // 2 - 3), size=(6, 6))
 
-        self._text("LIVE", live_x + 18, live_y + 4, font_size=12, color=_rgba(C.CYAN, 0.7), bold=True, font_name="RobotoMono")
+        self._text("LIVE", live_x + 18, live_y + 4, font_size=12, color=_rgba(C.CYAN, 0.7), bold=True)
 
         # Tap count
         count_str = f"{self.tap_count} cards tapped"
         self._text(
             count_str, live_x - 140, bar_h // 2 - 6,
-            font_size=14, color=C.TEXT_MUTED, font_name="RobotoMono",
+            font_size=14, color=C.TEXT_MUTED,
         )
 
     # ── toast ────────────────────────────────────────────────────────────────
@@ -575,7 +575,7 @@ class UI(FloatLayout):
         self._text(text, tx + 24, toast_y + 12, font_size=18, color=_rgba(C.TEXT, alpha))
 
     # ── text helper ──────────────────────────────────────────────────────────
-    def _text(self, text, x, y, font_size=16, color=None, bold=False, font_name="Roboto"):
+    def _text(self, text, x, y, font_size=16, color=None, bold=False):
         """Draw text using Kivy CoreLabel on canvas (retained-mode friendly)."""
         from kivy.core.text import Label as CoreLabel
 
@@ -583,7 +583,6 @@ class UI(FloatLayout):
             color = C.TEXT
         cl = CoreLabel(
             text=str(text), font_size=font_size, bold=bold,
-            font_name=font_name,
             color=color,
         )
         cl.refresh()

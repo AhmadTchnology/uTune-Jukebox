@@ -127,7 +127,7 @@ class RegisterUI(FloatLayout):
         self._redraw()
 
     # ── keyboard handling ────────────────────────────────────────────────────
-    def handle_key_down(self, key, scancode, codepoint, modifiers):
+    def handle_key_down(self, window, key, scancode, codepoint, modifiers):
         if key == 27:  # ESC
             if self.state in (STATE_HOME, STATE_DONE):
                 return False  # Let app quit
@@ -559,11 +559,11 @@ class RegisterUI(FloatLayout):
             # Bottom hint
             Color(1, 1, 1, 0.06)
             Rectangle(pos=(0, 40), size=(w, 1))
-            self._text("[ESC] Back / Exit", 28, 12, font_size=14, color=C.TEXT_MUTED, font_name="RobotoMono")
+            self._text("[ESC] Back / Exit", 28, 12, font_size=14, color=C.TEXT_MUTED)
 
     def _draw_header(self, w, h):
         self._text("uTune", 28, h - 50, font_size=34, color=C.CYAN, bold=True)
-        self._text("CARD REGISTRATION", 160, h - 42, font_size=14, color=_rgba(C.VIOLET, 0.7), bold=True, font_name="RobotoMono")
+        self._text("CARD REGISTRATION", 160, h - 42, font_size=14, color=_rgba(C.VIOLET, 0.7), bold=True)
         Color(1, 1, 1, 0.08)
         Rectangle(pos=(28, h - 70), size=(w - 56, 1))
 
@@ -593,7 +593,7 @@ class RegisterUI(FloatLayout):
 
     def _draw_pick_source(self, w, h):
         cx = w // 2
-        self._text(f"Card UID: {self.scanned_uid}", cx - 100, h - 130, font_size=16, color=C.CYAN, font_name="RobotoMono")
+        self._text(f"Card UID: {self.scanned_uid}", cx - 100, h - 130, font_size=16, color=C.CYAN)
 
         if self.existing_card:
             self._text(
@@ -658,7 +658,7 @@ class RegisterUI(FloatLayout):
             Line(rounded_rectangle=(list_x, iy - item_h + 4, 440, item_h - 4, 6), width=1)
 
             ext = os.path.splitext(self.local_files[idx])[1].upper()
-            self._text(ext, list_x + 10, iy - item_h + 14, font_size=13, color=C.CYAN if is_sel else C.TEXT_MUTED, font_name="RobotoMono")
+            self._text(ext, list_x + 10, iy - item_h + 14, font_size=13, color=C.CYAN if is_sel else C.TEXT_MUTED)
 
             fname = self.local_files[idx]
             if len(fname) > 40:
@@ -688,7 +688,7 @@ class RegisterUI(FloatLayout):
         ]
         fy = card_y + 125
         for label, value in fields:
-            self._text(label, card_x + 20, fy, font_size=13, color=C.VIOLET, bold=True, font_name="RobotoMono")
+            self._text(label, card_x + 20, fy, font_size=13, color=C.VIOLET, bold=True)
             self._text(value, card_x + 100, fy, font_size=18, color=C.TEXT)
             fy -= 34
 
@@ -737,7 +737,7 @@ class RegisterUI(FloatLayout):
             Color(*C.VIOLET[:3], 0.1)
             Line(rounded_rectangle=(list_x, iy - item_h + 4, 560, item_h - 4, 6), width=1)
 
-            self._text(card["uid"][:12], list_x + 10, iy - item_h + 16, font_size=13, color=C.CYAN, font_name="RobotoMono")
+            self._text(card["uid"][:12], list_x + 10, iy - item_h + 16, font_size=13, color=C.CYAN)
 
             title_text = card["title"]
             if len(title_text) > 28:
@@ -747,7 +747,7 @@ class RegisterUI(FloatLayout):
             is_url = card["url"].startswith("http")
             src = "YT" if is_url else "LOCAL"
             src_c = C.CYAN if is_url else C.VIOLET
-            self._text(src, list_x + 460, iy - item_h + 16, font_size=13, color=src_c, font_name="RobotoMono")
+            self._text(src, list_x + 460, iy - item_h + 16, font_size=13, color=src_c)
 
             # Delete button
             dx = list_x + 520
@@ -771,12 +771,12 @@ class RegisterUI(FloatLayout):
         Rectangle(pos=(bx, by + bh - 1), size=(bw, 1))
         self._text(text, cx - len(text) * 5, cy - 8, font_size=16, color=color, bold=True)
 
-    def _text(self, text, x, y, font_size=16, color=None, bold=False, font_name="Roboto"):
+    def _text(self, text, x, y, font_size=16, color=None, bold=False):
         if color is None:
             color = C.TEXT
         cl = CoreLabel(
             text=str(text), font_size=font_size, bold=bold,
-            font_name=font_name, color=color,
+            color=color,
         )
         cl.refresh()
         tex = cl.texture
