@@ -1,16 +1,17 @@
-# Audio and Video handling
-yt-dlp
+# UI Framework
+kivy
 
-# User Interface
-pygame
+# Audio/Video handling
+yt-dlp
 
 # Configuration parsing
 pyyaml
 
-# Serial RFID Reader (Windows/Linux)
+# Serial RFID Reader (USB OTG on Android, USB on desktop)
 pyserial
 
-# Raspberry Pi specific RFID hardware (Only installs on Linux)
-mfrc522; sys_platform == 'linux'
-RPi.GPIO; sys_platform == 'linux'
-spidev; sys_platform == 'linux'
+# Image processing (album art)
+pillow
+
+# Android API access (auto-included by Buildozer, needed for local dev)
+# pyjnius  # uncomment only if testing locally on Android

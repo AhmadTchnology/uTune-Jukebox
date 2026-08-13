@@ -26,3 +26,11 @@ rfid-jukebox.md
 
 Full-Screen Jukebox Interface/
 Full-Screen Jukebox Interface.zip
+
+music/
+
+# Buildozer
+.buildozer/
+bin/
+*.apk
+*.aab

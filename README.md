@@ -1,81 +1,79 @@
-# 🎵 uTune Jukebox
+# uTune Jukebox
 
-uTune is a modern, physical-to-digital music jukebox that plays YouTube audio by simply scanning an RFID card. Built with a sleek Pygame interface, it features a dynamic vinyl player animation, a queue system, and bulletproof YouTube bot-protection bypasses.
+uTune is a modern, dark-themed RFID-powered jukebox application built with Python. 
+It allows users to link physical NFC/RFID cards to YouTube audio streams or local audio files. When a card is placed on the reader, uTune automatically plays the associated song, displaying beautiful album art and a dynamic glassmorphism UI.
 
-![uTune Jukebox Interface](https://img.shields.io/badge/UI-Pygame-blue)
-![Python](https://img.shields.io/badge/Python-3.10%2B-green)
+The latest version is fully optimized for **ARM Android Tablets** using **Kivy** and **Buildozer**, while still supporting desktop testing environments.
 
-## ✨ Features
+## Features
 
-- **Physical RFID Interaction**: Scan a physical card to queue and play music instantly. Supports keyboard-emulating USB RFID readers.
-- **Premium Interface**: A gorgeous dark-mode UI with vinyl spinning animations, track status glow, and queue toast notifications.
-- **Bot Protection Bypass**: Built-in support for YouTube's latest anti-bot measures using `yt-dlp`, a JavaScript runtime (`deno`), and direct `mpv` pipelining to completely avoid 403 Forbidden errors.
-- **Card Registration CLI**: Easily map new RFID cards to YouTube URLs and song titles via the command line.
+- **Cross-Platform**: Runs on Android tablets (via Buildozer/Kivy) and Desktop.
+- **RFID/NFC Integration**: Supports USB OTG serial readers and USB keyboard emulators.
+- **YouTube Support**: Downloads and extracts audio directly via `yt-dlp`.
+- **Local Audio**: Plays local MP3/FLAC/WAV files with embedded album art extraction.
+- **Premium Interface**: Deep space background, glass cards, dynamic animations.
+- **Queue System**: Up-next queue with visual thumbnails.
 
-## 🛠️ Prerequisites
+## Hardware Requirements (Android Tablet)
+- Android Tablet (Android 11+ recommended)
+- USB OTG Adapter
+- USB RFID Card Reader (e.g. standard 125kHz or 13.56MHz reader that emulates a keyboard or provides a serial interface over USB)
+- RFID/NFC Cards or Fobs
 
-Before you start, make sure you have the following installed:
+## Installation & Packaging (Buildozer)
 
-1. **Python 3.10+**
-2. **[MPV Player](https://mpv.io/)**: Must be installed on your system.
-3. **[yt-dlp](https://github.com/yt-dlp/yt-dlp)**: Installed via pip or manually.
-4. **[Deno](https://deno.land/)**: A JavaScript runtime required to solve YouTube signature challenges.
+To package uTune as an Android APK, you must use a Linux environment (or WSL on Windows).
 
-## 🚀 Installation & Setup
+1. Install Buildozer:
+   ```bash
+   pip install --user buildozer
+   ```
 
-### 1. Clone the repository
-```bash
-git clone https://github.com/AhmadTchnology/uTune-Jukebox.git
-cd uTune-Jukebox
-```
+2. Initialize (Optional, already provided in repo):
+   ```bash
+   buildozer init
+   ```
 
-### 2. Install dependencies
-```bash
-pip install -r requirements.txt
-```
+3. Build the APK:
+   ```bash
+   # Make sure you are in the directory with buildozer.spec
+   buildozer -v android debug
+   ```
 
-### 3. Setup Deno
-Download the `deno.exe` binary for your OS and place it directly inside the `jukebox/` directory. This is critical for `yt-dlp` to execute YouTube's JS challenges.
+4. Deploy to connected Android device:
+   ```bash
+   buildozer -v android deploy run logcat
+   ```
 
-### 4. Setup YouTube Cookies
-To bypass YouTube's strict blocking of automated scripts:
-1. Install a browser extension like **"Get cookies.txt LOCALLY"**.
-2. Go to YouTube and ensure you are logged in.
-3. Export your cookies and save them as `cookies.txt` inside the `jukebox/` directory.
-*(Alternatively, you can run `python jukebox/export_cookies.py` to attempt an automatic extraction).*
+## Local Desktop Testing
 
-## 💳 Registering RFID Cards
+You can run uTune locally on your desktop for testing before packaging to Android.
 
-Before you can play music, you need to map your physical RFID cards to YouTube URLs.
+1. Install Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-```bash
-cd jukebox
-python register_cli.py
-```
-1. Scan your card when prompted.
-2. Paste the YouTube URL of the song.
-3. Enter the display title for the song.
-4. Press `Ctrl+C` to exit when done.
+2. Run the main jukebox UI:
+   ```bash
+   python jukebox/main.py
+   ```
 
-## 🎧 Running the Jukebox
+3. Run the card registration UI:
+   ```bash
+   python jukebox/register_cli.py
+   ```
 
-To launch the jukebox interface in full-screen (or windowed mode):
+## Configuration
 
-```bash
-cd jukebox
-python main.py
-```
+Configuration is managed via `jukebox/config.yaml`.
+- **rfid.mode**: Set to `keyboard` for USB readers that emulate keystrokes. Set to `serial` for COM/TTY readers.
+- **player.music_folder**: The directory where music is stored (defaults to a `music` folder in the app storage).
 
-- **Scan a card** to play a song immediately (if idle) or add it to the queue.
-- **Scan the same card twice** to skip the current track.
+## Card Registration
 
-## ⚙️ Configuration
-
-You can customize the jukebox by editing `jukebox/config.yaml`:
-- **UI Settings**: Adjust resolution, toggle fullscreen, and change FPS.
-- **RFID Settings**: Change the input mode (`keyboard` or `serial`), debounce time, and baud rate.
-- **Player Settings**: Set custom paths for `mpv` and the `cookies.txt` file.
-
-## 📝 License
-
-Distributed under the MIT License. See `LICENSE` for more information.
+To assign a song to an RFID card:
+1. Launch the Registration UI.
+2. Scan the card on the reader.
+3. Select whether to use a YouTube URL or a Local File.
+4. Confirm the details. The card is now linked!
