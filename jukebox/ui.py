@@ -21,6 +21,7 @@ from kivy.graphics import (
 from kivy.graphics.texture import Texture
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
+from kivy.metrics import sp, dp
 from kivy.properties import (
     BooleanProperty, StringProperty, NumericProperty, ListProperty,
 )
@@ -201,8 +202,8 @@ class UI(FloatLayout):
         if w < 10 or h < 10:
             return
 
-        pad = 28
-        right_w = 320
+        pad = int(dp(20))
+        right_w = int(dp(240))
         divider_x = w - right_w - pad
         left_w = divider_x - pad
 
@@ -221,10 +222,10 @@ class UI(FloatLayout):
 
             # 4 — Divider
             Color(1, 1, 1, 0.06)
-            Rectangle(pos=(divider_x, pad), size=(1, h - pad * 2 - 48))
+            Rectangle(pos=(divider_x, pad), size=(1, h - pad * 2 - int(dp(36))))
 
             # 5 — Right panel: Queue
-            self._draw_queue(divider_x + 24, pad, right_w - 24, h)
+            self._draw_queue(divider_x + int(dp(18)), pad, right_w - int(dp(18)), h)
 
             # 6 — Bottom bar
             self._draw_bottom_bar(w, h)
@@ -276,21 +277,21 @@ class UI(FloatLayout):
         top = h - y_pad
 
         # "NOW PLAYING" label with dot
-        label_y = top - 20
+        label_y = top - int(dp(16))
         Color(*C.CYAN[:3], 0.75)
-        Ellipse(pos=(x, label_y - 2), size=(6, 6))
+        Ellipse(pos=(x, label_y - 2), size=(int(dp(6)), int(dp(6))))
         self._text(
-            "NOW PLAYING", x + 14, label_y,
-            font_size=14, color=_rgba(C.CYAN, 0.75), bold=True,
+            "NOW PLAYING", x + int(dp(12)), label_y,
+            font_size=sp(18), color=_rgba(C.CYAN, 0.75), bold=True,
         )
 
         if track:
-            self._draw_playing(x, label_y - 40, w, track)
+            self._draw_playing(x, label_y - int(dp(32)), w, track)
         else:
             self._draw_idle(x, y_pad, w, h)
 
     def _draw_playing(self, x, top_y, w, track):
-        art_size = 200
+        art_size = int(dp(160))
         art_x = x
         art_y = top_y - art_size
 
@@ -298,25 +299,25 @@ class UI(FloatLayout):
         self._draw_album_art(art_x, art_y, art_size, track)
 
         # Track info to the right of art
-        info_x = art_x + art_size + 32
+        info_x = art_x + art_size + int(dp(24))
 
         title = track.get("title", "Unknown Track")
         if len(title) > 24:
             title = title[:21] + "..."
-        self._text(title, info_x, top_y - 10, font_size=42, color=C.TEXT, bold=True)
+        self._text(title, info_x, top_y - int(dp(8)), font_size=sp(48), color=C.TEXT, bold=True)
 
         artist = track.get("artist", "Unknown Artist")
-        self._text(artist, info_x, top_y - 60, font_size=22, color=C.TEXT_SEC)
+        self._text(artist, info_x, top_y - int(dp(52)), font_size=sp(28), color=C.TEXT_SEC)
 
         album = track.get("album", "")
-        offset = 85
+        offset = int(dp(68))
         if album:
-            self._text(album.upper(), info_x, top_y - offset, font_size=13, color=C.TEXT_MUTED)
-            offset += 30
+            self._text(album.upper(), info_x, top_y - offset, font_size=sp(18), color=C.TEXT_MUTED)
+            offset += int(dp(24))
 
         # Progress bar
-        prog_w = w - (info_x - x) - 20
-        self._draw_progress_bar(info_x, top_y - offset - 10, prog_w)
+        prog_w = w - (info_x - x) - int(dp(16))
+        self._draw_progress_bar(info_x, top_y - offset - int(dp(8)), prog_w)
 
     def _draw_album_art(self, x, y, size, track):
         cache_key = f"{track.get('title', '?')}_{'img' if track.get('image_bytes') else 'no'}"
@@ -341,8 +342,8 @@ class UI(FloatLayout):
             RoundedRectangle(pos=(x, y), size=(size, size // 2), radius=[0, 0, 12, 12])
             initial = (track.get("title", "?"))[0].upper()
             self._text(
-                initial, x + size // 2 - 20, y + size // 2 - 30,
-                font_size=72, color=(1, 1, 1, 0.2), bold=True,
+                initial, x + size // 2 - int(dp(16)), y + size // 2 - int(dp(24)),
+                font_size=sp(80), color=(1, 1, 1, 0.2), bold=True,
             )
 
         # Border
@@ -360,17 +361,17 @@ class UI(FloatLayout):
         if not track:
             return
 
-        bar_h = 2
+        bar_h = int(dp(2))
 
         if not self.player.play_start_time:
             # Loading indicator — pulsing bar
             Color(1, 1, 1, 0.07)
             Rectangle(pos=(x, y), size=(w, bar_h))
-            pulse_w = 40
+            pulse_w = int(dp(32))
             pulse_x = int((w - pulse_w) * ((math.sin(self.pulse_phase * 3) + 1) / 2))
             Color(*C.CYAN)
             Rectangle(pos=(x + pulse_x, y), size=(pulse_w, bar_h))
-            self._text("Loading...", x, y - 24, font_size=18, color=C.CYAN)
+            self._text("Loading...", x, y - int(dp(20)), font_size=sp(22), color=C.CYAN)
             return
 
         elapsed = _time.time() - self.player.play_start_time
@@ -389,15 +390,15 @@ class UI(FloatLayout):
         # Time labels
         mins, secs = int(elapsed) // 60, int(elapsed) % 60
         self._text(
-            f"{mins}:{secs:02d}", x, y - 24,
-            font_size=18, color=_rgba(C.CYAN, 0.7),
+            f"{mins}:{secs:02d}", x, y - int(dp(20)),
+            font_size=sp(22), color=_rgba(C.CYAN, 0.7),
         )
         if duration:
             dur = float(duration)
             dm, ds = int(dur) // 60, int(dur) % 60
             self._text(
-                f"{dm}:{ds:02d}", x + w - 50, y - 24,
-                font_size=18, color=C.TEXT_MUTED,
+                f"{dm}:{ds:02d}", x + w - int(dp(40)), y - int(dp(20)),
+                font_size=sp(22), color=C.TEXT_MUTED,
             )
 
     def _draw_idle(self, x, y_pad, w, h):
@@ -405,58 +406,59 @@ class UI(FloatLayout):
         cy = h // 2
 
         # NFC card icon
-        card_x, card_y = cx - 24, cy + 20
+        card_w, card_h_icon = int(dp(40)), int(dp(48))
+        card_x, card_y = cx - card_w // 2, cy + int(dp(16))
         Color(*C.CYAN[:3], 0.16)
-        RoundedRectangle(pos=(card_x, card_y), size=(48, 56), radius=[6])
+        RoundedRectangle(pos=(card_x, card_y), size=(card_w, card_h_icon), radius=[6])
         Color(*C.CYAN[:3], 0.55)
-        Line(rounded_rectangle=(card_x, card_y, 48, 56, 6), width=1.5)
+        Line(rounded_rectangle=(card_x, card_y, card_w, card_h_icon, 6), width=1.5)
 
         # Chip
         Color(*C.CYAN[:3], 0.4)
-        RoundedRectangle(pos=(card_x + 8, card_y + 38), size=(16, 10), radius=[2])
+        RoundedRectangle(pos=(card_x + int(dp(6)), card_y + card_h_icon - int(dp(14))), size=(int(dp(14)), int(dp(8))), radius=[2])
 
         # Signal arcs
-        for i, (radius, alpha) in enumerate([(6, 0.8), (12, 0.5), (18, 0.3)]):
+        for i, (radius, alpha) in enumerate([(int(dp(5)), 0.8), (int(dp(10)), 0.5), (int(dp(15)), 0.3)]):
             Color(*C.CYAN[:3], alpha)
             Line(
-                circle=(card_x + 36, card_y + 28, radius, 315, 405),
+                circle=(card_x + card_w - int(dp(8)), card_y + int(dp(24)), radius, 315, 405),
                 width=1.5,
             )
 
         # Text with bob
         bob = math.sin(self.idle_bob) * 3
         self._text(
-            "Tap a card to play", cx - 100, cy - 30 + bob,
-            font_size=28, color=C.TEXT_SEC,
+            "Tap a card to play", cx - int(dp(90)), cy - int(dp(24)) + bob,
+            font_size=sp(34), color=C.TEXT_SEC,
         )
         self._text(
-            "Place an RFID card on the reader", cx - 150, cy - 65 + bob,
-            font_size=18, color=C.TEXT_MUTED,
+            "Place an NFC card on the reader", cx - int(dp(140)), cy - int(dp(52)) + bob,
+            font_size=sp(22), color=C.TEXT_MUTED,
         )
 
         # Error display
         if self.player.last_error:
             err = self.player.last_error[:60]
-            self._text(err, cx - 150, cy - 100, font_size=16, color=(1, 0.37, 0.37, 1))
+            self._text(err, cx - int(dp(120)), cy - int(dp(80)), font_size=sp(20), color=(1, 0.37, 0.37, 1))
 
     # ── queue panel ──────────────────────────────────────────────────────────
     def _draw_queue(self, x, y_pad, w, h):
         top = h - y_pad
         Color(*C.VIOLET[:3], 0.75)
-        self._text("UP NEXT", x, top - 20, font_size=14, color=_rgba(C.VIOLET, 0.75), bold=True)
+        self._text("UP NEXT", x, top - int(dp(16)), font_size=sp(18), color=_rgba(C.VIOLET, 0.75), bold=True)
 
         upcoming = self.queue_mgr.get_upcoming()
 
         if not upcoming:
-            self._text("Queue is empty", x + w // 2 - 55, top - 70, font_size=18, color=C.TEXT_MUTED)
-            self._text("Scan cards to add songs", x + w // 2 - 80, top - 95, font_size=15, color=C.TEXT_MUTED)
+            self._text("Queue is empty", x + w // 2 - int(dp(48)), top - int(dp(56)), font_size=sp(22), color=C.TEXT_MUTED)
+            self._text("Scan cards to add songs", x + w // 2 - int(dp(72)), top - int(dp(80)), font_size=sp(18), color=C.TEXT_MUTED)
             return
 
-        card_h_next = 58
-        card_h_normal = 48
-        gap = 8
+        card_h_next = int(dp(48))
+        card_h_normal = int(dp(40))
+        gap = int(dp(6))
         max_visible = min(len(upcoming), 5)
-        iy = top - 50
+        iy = top - int(dp(40))
 
         for i in range(max_visible):
             item = upcoming[i]
@@ -480,8 +482,8 @@ class UI(FloatLayout):
                 Rectangle(pos=(x, iy - 1), size=(w, 1))
 
             # Mini album art
-            thumb_size = 42 if is_next else 34
-            thumb_x = x + 12
+            thumb_size = int(dp(36)) if is_next else int(dp(28))
+            thumb_x = x + int(dp(8))
             thumb_y = iy - ch + (ch - thumb_size) // 2
             accent = C.CYAN if i % 2 == 0 else C.VIOLET
             Color(*accent[:3], 0.3)
@@ -503,25 +505,25 @@ class UI(FloatLayout):
             Line(rounded_rectangle=(thumb_x, thumb_y, thumb_size, thumb_size, 6), width=1)
 
             # Title
-            text_x = thumb_x + thumb_size + 10
+            text_x = thumb_x + thumb_size + int(dp(8))
             title = item.get("title", "Unknown")
             if len(title) > 22:
                 title = title[:19] + "..."
-            self._text(title, text_x, iy - ch // 2 + 2, font_size=16, color=C.TEXT_SLATE, bold=True)
+            self._text(title, text_x, iy - ch // 2 + int(dp(2)), font_size=sp(20), color=C.TEXT_SLATE, bold=True)
 
             artist = item.get("artist", "")
             if artist:
-                self._text(artist, text_x, iy - ch // 2 - 14, font_size=13, color=C.TEXT_DIM)
+                self._text(artist, text_x, iy - ch // 2 - int(dp(12)), font_size=sp(16), color=C.TEXT_DIM)
 
             iy -= ch + gap
 
         if len(upcoming) > max_visible:
             more = len(upcoming) - max_visible
-            self._text(f"+ {more} more...", x + 10, iy - 5, font_size=15, color=C.TEXT_MUTED)
+            self._text(f"+ {more} more...", x + int(dp(8)), iy - int(dp(4)), font_size=sp(18), color=C.TEXT_MUTED)
 
     # ── bottom bar ───────────────────────────────────────────────────────────
     def _draw_bottom_bar(self, w, h):
-        bar_h = 48
+        bar_h = int(dp(40))
         bar_y = 0
 
         # Top border
@@ -529,12 +531,12 @@ class UI(FloatLayout):
         Rectangle(pos=(0, bar_h), size=(w, 1))
 
         # Hints
-        self._text("[S] Skip", 28, bar_h // 2 - 6, font_size=13, color=C.TEXT_MUTED)
-        self._text("[ESC] Quit", 120, bar_h // 2 - 6, font_size=13, color=C.TEXT_MUTED)
+        self._text("[S] Skip", int(dp(20)), bar_h // 2 - int(dp(5)), font_size=sp(16), color=C.TEXT_MUTED)
+        self._text("[ESC] Quit", int(dp(88)), bar_h // 2 - int(dp(5)), font_size=sp(16), color=C.TEXT_MUTED)
 
         # LIVE badge (right side)
-        live_w, live_h = 56, 22
-        live_x = w - 28 - live_w
+        live_w, live_h = int(dp(48)), int(dp(20))
+        live_x = w - int(dp(24)) - live_w
         live_y = bar_h // 2 - live_h // 2
 
         Color(*C.CYAN[:3], 0.04)
@@ -545,15 +547,16 @@ class UI(FloatLayout):
         # Pulsing dot
         dot_a = 0.8 + 0.2 * math.sin(self.pulse_phase * 3)
         Color(*C.CYAN[:3], dot_a)
-        Ellipse(pos=(live_x + 7, live_y + live_h // 2 - 3), size=(6, 6))
+        dot_sz = int(dp(5))
+        Ellipse(pos=(live_x + int(dp(6)), live_y + live_h // 2 - dot_sz // 2), size=(dot_sz, dot_sz))
 
-        self._text("LIVE", live_x + 18, live_y + 4, font_size=12, color=_rgba(C.CYAN, 0.7), bold=True)
+        self._text("LIVE", live_x + int(dp(16)), live_y + int(dp(3)), font_size=sp(14), color=_rgba(C.CYAN, 0.7), bold=True)
 
         # Tap count
         count_str = f"{self.tap_count} cards tapped"
         self._text(
-            count_str, live_x - 140, bar_h // 2 - 6,
-            font_size=14, color=C.TEXT_MUTED,
+            count_str, live_x - int(dp(120)), bar_h // 2 - int(dp(5)),
+            font_size=sp(17), color=C.TEXT_MUTED,
         )
 
     # ── toast ────────────────────────────────────────────────────────────────
@@ -562,20 +565,20 @@ class UI(FloatLayout):
         if alpha < 0.01:
             return
 
-        toast_y = 80
+        toast_y = int(dp(64))
         text = self.toast_message
-        tw = len(text) * 10 + 48
+        tw = len(text) * int(dp(8)) + int(dp(40))
         tx = (w - tw) // 2
-        th = 44
+        th = int(dp(40))
 
         Color(*C.GLASS_BG[:3], alpha * 0.8)
         RoundedRectangle(pos=(tx, toast_y), size=(tw, th), radius=[12])
         Color(*C.CYAN[:3], alpha * 0.3)
         Line(rounded_rectangle=(tx, toast_y, tw, th, 12), width=1)
-        self._text(text, tx + 24, toast_y + 12, font_size=18, color=_rgba(C.TEXT, alpha))
+        self._text(text, tx + int(dp(20)), toast_y + int(dp(10)), font_size=sp(22), color=_rgba(C.TEXT, alpha))
 
     # ── text helper ──────────────────────────────────────────────────────────
-    def _text(self, text, x, y, font_size=16, color=None, bold=False):
+    def _text(self, text, x, y, font_size=sp(20), color=None, bold=False):
         """Draw text using Kivy CoreLabel on canvas (retained-mode friendly)."""
         from kivy.core.text import Label as CoreLabel
 

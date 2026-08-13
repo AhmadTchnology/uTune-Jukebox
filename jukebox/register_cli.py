@@ -15,6 +15,7 @@ from kivy.uix.textinput import TextInput
 from kivy.graphics import Color, Rectangle, RoundedRectangle, Ellipse, Line
 from kivy.clock import Clock
 from kivy.core.text import Label as CoreLabel
+from kivy.metrics import sp, dp
 
 from config import config
 from registry import Registry
@@ -297,7 +298,7 @@ class RegisterUI(FloatLayout):
             size_hint=(None, None),
             size=(min(600, self.width - 100), 44),
             pos=(self.width // 2 - min(300, (self.width - 100) // 2), self.height // 2 - 22),
-            font_size=20,
+            font_size=sp(24),
             background_color=(C.GLASS_BG[0], C.GLASS_BG[1], C.GLASS_BG[2], 0.8),
             foreground_color=C.TEXT,
             cursor_color=C.CYAN,
@@ -554,23 +555,23 @@ class RegisterUI(FloatLayout):
                 RoundedRectangle(pos=(tx, 60), size=(tw, 44), radius=[12])
                 Color(*C.GREEN[:3], alpha * 0.3)
                 Line(rounded_rectangle=(tx, 60, tw, 44, 12), width=1)
-                self._text(self.toast_msg, tx + 24, 72, font_size=18, color=_rgba(C.TEXT, alpha))
+                self._text(self.toast_msg, tx + 24, 72, font_size=sp(22), color=_rgba(C.TEXT, alpha))
 
             # Bottom hint
             Color(1, 1, 1, 0.06)
             Rectangle(pos=(0, 40), size=(w, 1))
-            self._text("[ESC] Back / Exit", 28, 12, font_size=14, color=C.TEXT_MUTED)
+            self._text("[ESC] Back / Exit", 28, 12, font_size=sp(18), color=C.TEXT_MUTED)
 
     def _draw_header(self, w, h):
-        self._text("uTune", 28, h - 50, font_size=34, color=C.CYAN, bold=True)
-        self._text("CARD REGISTRATION", 160, h - 42, font_size=14, color=_rgba(C.VIOLET, 0.7), bold=True)
+        self._text("uTune", 28, h - 50, font_size=sp(38), color=C.CYAN, bold=True)
+        self._text("CARD REGISTRATION", 160, h - 42, font_size=sp(18), color=_rgba(C.VIOLET, 0.7), bold=True)
         Color(1, 1, 1, 0.08)
         Rectangle(pos=(28, h - 70), size=(w - 56, 1))
 
     def _draw_home(self, w, h):
         cx = w // 2
-        self._text("Card Manager", cx - 70, h - 140, font_size=24, color=C.TEXT, bold=True)
-        self._text(f"Cards registered: {self._card_count()}", cx - 80, h - 175, font_size=18, color=C.TEXT_SEC)
+        self._text("Card Manager", cx - 70, h - 140, font_size=sp(28), color=C.TEXT, bold=True)
+        self._text(f"Cards registered: {self._card_count()}", cx - 80, h - 175, font_size=sp(22), color=C.TEXT_SEC)
         self._draw_button(cx, h - 280, 260, 50, "Register New Card", C.CYAN)
         self._draw_button(cx, h - 350, 260, 50, "View All Cards", C.VIOLET)
 
@@ -588,28 +589,28 @@ class RegisterUI(FloatLayout):
         Color(*C.CYAN[:3], inner_a)
         Ellipse(pos=(cx - 28, cy - 28), size=(56, 56))
 
-        self._text("Scan RFID Card", cx - 80, cy - radius - 40, font_size=24, color=C.TEXT, bold=True)
-        self._text("Place card on the reader...", cx - 110, cy - radius - 70, font_size=18, color=C.TEXT_MUTED)
+        self._text("Scan RFID Card", cx - 80, cy - radius - 40, font_size=sp(28), color=C.TEXT, bold=True)
+        self._text("Place card on the reader...", cx - 110, cy - radius - 70, font_size=sp(22), color=C.TEXT_MUTED)
 
     def _draw_pick_source(self, w, h):
         cx = w // 2
-        self._text(f"Card UID: {self.scanned_uid}", cx - 100, h - 130, font_size=16, color=C.CYAN)
+        self._text(f"Card UID: {self.scanned_uid}", cx - 100, h - 130, font_size=sp(20), color=C.CYAN)
 
         if self.existing_card:
             self._text(
                 f"Already registered: {self.existing_card['title']}", cx - 160, h - 160,
-                font_size=18, color=C.ORANGE,
+                font_size=sp(22), color=C.ORANGE,
             )
-            self._text("Continuing will overwrite", cx - 90, h - 185, font_size=14, color=C.TEXT_MUTED)
+            self._text("Continuing will overwrite", cx - 90, h - 185, font_size=sp(18), color=C.TEXT_MUTED)
 
-        self._text("Choose Audio Source", cx - 100, h - 230, font_size=24, color=C.TEXT, bold=True)
+        self._text("Choose Audio Source", cx - 100, h - 230, font_size=sp(28), color=C.TEXT, bold=True)
         self._draw_button(cx, h - 300, 300, 50, "[1] YouTube URL", C.CYAN)
         self._draw_button(cx, h - 370, 300, 50, "[2] Local File", C.VIOLET)
 
     def _draw_input_screen(self, w, h, label):
         cx = w // 2
-        self._text(label, cx - 100, h - 170, font_size=24, color=C.TEXT, bold=True)
-        self._text("Press ENTER to confirm  •  ESC to cancel", cx - 170, h // 2 - 60, font_size=14, color=C.TEXT_MUTED)
+        self._text(label, cx - 100, h - 170, font_size=sp(28), color=C.TEXT, bold=True)
+        self._text("Press ENTER to confirm  •  ESC to cancel", cx - 170, h // 2 - 60, font_size=sp(18), color=C.TEXT_MUTED)
 
     def _draw_downloading(self, w, h):
         cx = w // 2
@@ -625,17 +626,17 @@ class RegisterUI(FloatLayout):
             Color(*C.CYAN[:3], dot_a)
             Ellipse(pos=(sx - 3, sy - 3), size=(6, 6))
 
-        self._text("Downloading Audio...", cx - 100, cy - 30, font_size=24, color=C.TEXT, bold=True)
-        self._text(self.download_progress, cx - 150, cy - 60, font_size=18, color=C.TEXT_SEC)
-        self._text("Please wait...", cx - 50, cy - 90, font_size=14, color=C.TEXT_MUTED)
+        self._text("Downloading Audio...", cx - 100, cy - 30, font_size=sp(28), color=C.TEXT, bold=True)
+        self._text(self.download_progress, cx - 150, cy - 60, font_size=sp(22), color=C.TEXT_SEC)
+        self._text("Please wait...", cx - 50, cy - 90, font_size=sp(18), color=C.TEXT_MUTED)
 
     def _draw_pick_file(self, w, h):
         cx = w // 2
-        self._text("Select Audio File", cx - 90, h - 130, font_size=24, color=C.TEXT, bold=True)
-        self._text(f"Folder: {config.music_folder}", cx - 180, h - 160, font_size=14, color=C.TEXT_MUTED)
+        self._text("Select Audio File", cx - 90, h - 130, font_size=sp(28), color=C.TEXT, bold=True)
+        self._text(f"Folder: {config.music_folder}", cx - 180, h - 160, font_size=sp(18), color=C.TEXT_MUTED)
 
         if not self.local_files:
-            self._text("No audio files found in music folder", cx - 150, h // 2, font_size=18, color=C.RED)
+            self._text("No audio files found in music folder", cx - 150, h // 2, font_size=sp(22), color=C.RED)
             return
 
         list_x = cx - 220
@@ -658,18 +659,18 @@ class RegisterUI(FloatLayout):
             Line(rounded_rectangle=(list_x, iy - item_h + 4, 440, item_h - 4, 6), width=1)
 
             ext = os.path.splitext(self.local_files[idx])[1].upper()
-            self._text(ext, list_x + 10, iy - item_h + 14, font_size=13, color=C.CYAN if is_sel else C.TEXT_MUTED)
+            self._text(ext, list_x + 10, iy - item_h + 14, font_size=sp(18), color=C.CYAN if is_sel else C.TEXT_MUTED)
 
             fname = self.local_files[idx]
             if len(fname) > 40:
                 fname = fname[:37] + "..."
-            self._text(fname, list_x + 60, iy - item_h + 14, font_size=15, color=C.TEXT if is_sel else C.TEXT_SEC)
+            self._text(fname, list_x + 60, iy - item_h + 14, font_size=sp(19), color=C.TEXT if is_sel else C.TEXT_SEC)
 
-        self._text("↑↓ Navigate  •  ENTER select  •  Click to pick", cx - 180, list_y - visible * item_h - 10, font_size=14, color=C.TEXT_MUTED)
+        self._text("↑↓ Navigate  •  ENTER select  •  Click to pick", cx - 180, list_y - visible * item_h - 10, font_size=sp(18), color=C.TEXT_MUTED)
 
     def _draw_confirm(self, w, h):
         cx = w // 2
-        self._text("Confirm Registration", cx - 100, h - 160, font_size=24, color=C.TEXT, bold=True)
+        self._text("Confirm Registration", cx - 100, h - 160, font_size=sp(28), color=C.TEXT, bold=True)
 
         card_w = min(500, w - 80)
         card_x = cx - card_w // 2
@@ -688,11 +689,11 @@ class RegisterUI(FloatLayout):
         ]
         fy = card_y + 125
         for label, value in fields:
-            self._text(label, card_x + 20, fy, font_size=13, color=C.VIOLET, bold=True)
-            self._text(value, card_x + 100, fy, font_size=18, color=C.TEXT)
+            self._text(label, card_x + 20, fy, font_size=sp(18), color=C.VIOLET, bold=True)
+            self._text(value, card_x + 100, fy, font_size=sp(22), color=C.TEXT)
             fy -= 34
 
-        self._text("Press Y or ENTER to confirm  •  N to cancel", cx - 180, card_y - 30, font_size=18, color=C.TEXT_SEC)
+        self._text("Press Y or ENTER to confirm  •  N to cancel", cx - 180, card_y - 30, font_size=sp(22), color=C.TEXT_SEC)
 
     def _draw_done(self, w, h):
         cx = w // 2
@@ -707,17 +708,17 @@ class RegisterUI(FloatLayout):
         Color(*C.GREEN)
         Line(points=[cx - 12, cy - 2, cx - 2, cy - 12, cx + 16, cy + 10], width=2)
 
-        self._text("Card Registered!", cx - 85, cy - 60, font_size=24, color=C.GREEN, bold=True)
-        self._text(self.reg_title, cx - 80, cy - 90, font_size=18, color=C.TEXT)
-        self._text("Press ENTER to register another  •  ESC to exit", cx - 200, cy - 130, font_size=14, color=C.TEXT_MUTED)
+        self._text("Card Registered!", cx - 85, cy - 60, font_size=sp(28), color=C.GREEN, bold=True)
+        self._text(self.reg_title, cx - 80, cy - 90, font_size=sp(22), color=C.TEXT)
+        self._text("Press ENTER to register another  •  ESC to exit", cx - 200, cy - 130, font_size=sp(18), color=C.TEXT_MUTED)
 
     def _draw_cards_list(self, w, h):
         cx = w // 2
-        self._text("Registered Cards", cx - 85, h - 120, font_size=24, color=C.TEXT, bold=True)
-        self._text(f"{len(self.cards_list)} cards", cx - 30, h - 148, font_size=14, color=C.TEXT_MUTED)
+        self._text("Registered Cards", cx - 85, h - 120, font_size=sp(28), color=C.TEXT, bold=True)
+        self._text(f"{len(self.cards_list)} cards", cx - 30, h - 148, font_size=sp(18), color=C.TEXT_MUTED)
 
         if not self.cards_list:
-            self._text("No cards registered yet", cx - 90, h // 2, font_size=18, color=C.TEXT_MUTED)
+            self._text("No cards registered yet", cx - 90, h // 2, font_size=sp(22), color=C.TEXT_MUTED)
             return
 
         list_x = cx - 280
@@ -737,17 +738,17 @@ class RegisterUI(FloatLayout):
             Color(*C.VIOLET[:3], 0.1)
             Line(rounded_rectangle=(list_x, iy - item_h + 4, 560, item_h - 4, 6), width=1)
 
-            self._text(card["uid"][:12], list_x + 10, iy - item_h + 16, font_size=13, color=C.CYAN)
+            self._text(card["uid"][:12], list_x + 10, iy - item_h + 16, font_size=sp(18), color=C.CYAN)
 
             title_text = card["title"]
             if len(title_text) > 28:
                 title_text = title_text[:25] + "..."
-            self._text(title_text, list_x + 140, iy - item_h + 16, font_size=18, color=C.TEXT)
+            self._text(title_text, list_x + 140, iy - item_h + 16, font_size=sp(22), color=C.TEXT)
 
             is_url = card["url"].startswith("http")
             src = "YT" if is_url else "LOCAL"
             src_c = C.CYAN if is_url else C.VIOLET
-            self._text(src, list_x + 460, iy - item_h + 16, font_size=13, color=src_c)
+            self._text(src, list_x + 460, iy - item_h + 16, font_size=sp(18), color=src_c)
 
             # Delete button
             dx = list_x + 520
@@ -756,7 +757,7 @@ class RegisterUI(FloatLayout):
             RoundedRectangle(pos=(dx, dy), size=(32, 28), radius=[4])
             Color(*C.RED[:3], 0.6)
             Line(rounded_rectangle=(dx, dy, 32, 28, 4), width=1)
-            self._text("X", dx + 10, dy + 5, font_size=16, color=C.RED, bold=True)
+            self._text("X", dx + 10, dy + 5, font_size=sp(20), color=C.RED, bold=True)
 
     # ── drawing helpers ──────────────────────────────────────────────────────
     def _draw_button(self, cx, cy, bw, bh, text, color):
@@ -769,9 +770,11 @@ class RegisterUI(FloatLayout):
         # Top highlight
         Color(*color[:3], 0.15)
         Rectangle(pos=(bx, by + bh - 1), size=(bw, 1))
-        self._text(text, cx - len(text) * 5, cy - 8, font_size=16, color=color, bold=True)
+        self._text(text, cx - len(text) * 5, cy - 8, font_size=sp(20), color=color, bold=True)
 
-    def _text(self, text, x, y, font_size=16, color=None, bold=False):
+    def _text(self, text, x, y, font_size=None, color=None, bold=False):
+        if font_size is None:
+            font_size = sp(20)
         if color is None:
             color = C.TEXT
         cl = CoreLabel(

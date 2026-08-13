@@ -10,13 +10,14 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
 from kivy.app import App
 from kivy.core.window import Window
+from kivy.clock import Clock
 from config import config
 from registry import Registry
 from queue_manager import JukeboxQueue
 from player import Player
 from rfid_reader import RFIDReader
 from ui import UI
-from platform_utils import request_android_permissions
+from platform_utils import request_android_permissions, is_android
 
 
 class JukeboxApp(App):
@@ -28,7 +29,6 @@ class JukeboxApp(App):
             Window.size = config.ui_resolution
 
         print("Starting uTune Jukebox...")
-        request_android_permissions()
 
         self.registry = Registry(config.db_path)
         self.queue_mgr = JukeboxQueue()
@@ -70,7 +70,21 @@ class JukeboxApp(App):
         self.worker_thread.start()
 
         self.ui.start()
+
+        # Request Android permissions AFTER the activity is fully built
+        Clock.schedule_once(self._request_permissions, 1.0)
+
         return self.ui
+
+    def _request_permissions(self, dt):
+        """Request runtime permissions after the Activity is ready."""
+        def on_permissions_result(permissions, grant_results):
+            print(f"[App] Permissions result: {list(zip(permissions, grant_results))}")
+            for perm, granted in zip(permissions, grant_results):
+                if not granted:
+                    print(f"[App] WARNING: Permission denied: {perm}")
+
+        request_android_permissions(callback=on_permissions_result)
 
     def on_pause(self):
         if hasattr(self, 'reader'):

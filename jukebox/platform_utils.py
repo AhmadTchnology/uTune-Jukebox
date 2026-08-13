@@ -49,14 +49,46 @@ def get_subprocess_flags():
     return {}
 
 
-def request_android_permissions():
+def request_android_permissions(callback=None):
+    """Request runtime permissions on Android 6+.
+
+    Must be called AFTER the Activity is fully created (use Clock.schedule_once).
+    NFC is an install-time permission (declared in manifest), not runtime.
+    INTERNET is also install-time. But we request WRITE/READ_EXTERNAL_STORAGE
+    for music file access on older Android versions.
+    """
     if not is_android():
+        if callback:
+            callback([], [])
         return
     try:
         from android.permissions import request_permissions, Permission
-        request_permissions([
+        perms = [
             Permission.INTERNET,
-            Permission.NFC
-        ])
+            Permission.WRITE_EXTERNAL_STORAGE,
+            Permission.READ_EXTERNAL_STORAGE,
+        ]
+        request_permissions(perms, callback)
+        print(f"[Platform] Requested permissions: {perms}")
     except Exception as e:
         print(f"[Platform] Permission request error: {e}")
+
+
+def get_dpi_scale():
+    """Get a font/UI scale factor based on screen density.
+
+    Returns a multiplier: 1.0 for ~160dpi desktop, ~2.0 for typical tablets.
+    On desktop, returns 1.0.
+    """
+    if is_android():
+        try:
+            from jnius import autoclass
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            activity = PythonActivity.mActivity
+            metrics = activity.getResources().getDisplayMetrics()
+            # density is 1.0 at 160dpi, 2.0 at 320dpi, etc.
+            return max(1.0, metrics.density)
+        except Exception as e:
+            print(f"[Platform] Could not read DPI: {e}")
+            return 1.5  # Safe fallback for tablets
+    return 1.0
