@@ -459,7 +459,8 @@ class UI(FloatLayout):
         self.status_message = ""
         self.status_end = 0
 
-        self.volume = 68
+        # single source of truth is the player, when it exposes one
+        self.volume = getattr(player, "volume", 68)
 
         self._art_cache_key = None
         self._art_texture = None
@@ -734,6 +735,19 @@ class UI(FloatLayout):
 
     def handle_key_down(self, window, key, scancode, codepoint, modifiers):
         self.dirty = True
+
+        # A focused TextInput listens on the same Window.on_key_down event we
+        # do. Returning True here swallows the key before Kivy's keyboard
+        # handler runs, which kills backspace/arrows/selection inside the
+        # field — so while a field is live we only claim Escape and let every
+        # other key fall through to it. ENTER is handled by on_text_validate.
+        if self._text_input is not None and self._text_input.focus:
+            if key == 27:
+                self._reset_reg()
+                self.reg_state = REG_STATE_HOME
+                return True
+            return False
+
         if self.page == "player" and self._target_page == "player":
             if self.unknown_uid:
                 if key == 27:
@@ -1105,6 +1119,8 @@ class UI(FloatLayout):
             status = ("CARD READ", C.SUCCESS, C.SUCCESS_SOFT, 0.0)
         elif loading:
             status = ("LOADING", C.INDIGO_SOFT, C.INDIGO_SOFT, 1.0)
+        elif track and getattr(self.player, "is_paused", False):
+            status = ("PAUSED", C.WARNING, C.WARNING, 0.0)
         elif track:
             status = ("LIVE", C.CYAN, C.CYAN_SOFT, 1.6)
         else:
@@ -1286,7 +1302,7 @@ class UI(FloatLayout):
         self._glow_circle(x + 52, cy, 104, C.INDIGO, 0.45 if not pressed else 0.6, 30)
         self._circle(x + 52, cy, 104, C.WHITE,
                      texture=_grad_tex(C.INDIGO, C.MAGENTA))
-        if self.player.is_playing:
+        if self.player.is_playing and not getattr(self.player, "is_paused", False):
             self._icon_pause(x + 52, cy, 34, C.WHITE)
         else:
             self._icon_play(x + 52, cy, 34, C.WHITE)
@@ -2286,7 +2302,6 @@ class UI(FloatLayout):
         px, _py, pw, _ph = rect
         pct = (mx - px - self.f.u(12)) / max(1.0, pw - self.f.u(24))
         self.volume = int(round(max(0.0, min(1.0, pct)) * 100))
-        # player.py owns playback; apply the level only if it grew an API for it.
         setter = getattr(self.player, "set_volume", None)
         if callable(setter):
             try:
@@ -2357,7 +2372,8 @@ class UI(FloatLayout):
                               else REG_STATE_INPUT_ARTIST)
             self._show_text_input(
                 "Enter Song Title:" if index == 0 else "Enter Artist Name:",
-                self.reg_title if index == 0 else self.reg_artist,
+                preset=self.reg_title if index == 0 else self.reg_artist,
+                hint="Song title" if index == 0 else "Artist name",
             )
             return
         if name.startswith("reg.del."):
@@ -2371,13 +2387,12 @@ class UI(FloatLayout):
             return
 
     def _toggle_playback(self):
-        """player.py has no pause API yet — honour one if it appears."""
-        for name in ("toggle_pause", "pause" if self.player.is_playing else "resume"):
-            fn = getattr(self.player, name, None)
-            if callable(fn):
-                fn()
-                self.dirty = True
-                return
+        if not self.player.current_track:
+            return
+        toggle = getattr(self.player, "toggle_pause", None)
+        if callable(toggle):
+            toggle()
+            self.dirty = True
 
     def _open_register(self):
         self._target_page = "register"
@@ -2391,10 +2406,14 @@ class UI(FloatLayout):
         self.file_selected = index
         filename = self.local_files[index]
         self.reg_url = filename
-        title = self._get_title_from_file(filename)
-        preset = title if title else os.path.splitext(filename)[0]
+        # Only prefill from real sidecar metadata. Seeding the field with the
+        # bare filename gives staff something they have to delete before they
+        # can type the title they actually want.
+        title, _duration = self._file_meta_for(filename)
+        self.reg_title = title or ""
         self.reg_state = REG_STATE_INPUT_TITLE
-        self._show_text_input("Enter Song Title:", preset)
+        self._show_text_input("Enter Song Title:", preset=self.reg_title,
+                              hint="Song title")
 
     def _handle_reg_key(self, key, codepoint):
         if key == 27:
@@ -2431,21 +2450,11 @@ class UI(FloatLayout):
                 self._select_file(self.file_selected)
             return True
 
-        if self.reg_state == REG_STATE_INPUT_TITLE:
+        if self.reg_state in (REG_STATE_INPUT_TITLE, REG_STATE_INPUT_ARTIST):
+            # Only reached when the field lost focus; a focused field handles
+            # ENTER itself via on_text_validate.
             if key in (13, 271):
-                text = self._get_input_text()
-                if text.strip():
-                    self.reg_title = text.strip()
-                    self.reg_state = REG_STATE_INPUT_ARTIST
-                    self._show_text_input("Enter Artist Name:", preset="")
-            return True
-
-        if self.reg_state == REG_STATE_INPUT_ARTIST:
-            if key in (13, 271):
-                text = self._get_input_text()
-                self.reg_artist = text.strip()
-                self._remove_text_input()
-                self.reg_state = REG_STATE_CONFIRM
+                self._advance_from_field()
             return True
 
         if self.reg_state == REG_STATE_CONFIRM:
@@ -2472,24 +2481,49 @@ class UI(FloatLayout):
 
     # ── text input ───────────────────────────────────────────────────────────
 
-    def _show_text_input(self, label, preset=""):
+    def _show_text_input(self, label, preset="", hint=""):
         self._remove_text_input()
         self._input_label = label
         ti = TextInput(
             text=preset,
+            hint_text=hint,
             multiline=False,
+            write_tab=False,
             size_hint=(None, None),
             background_color=(*C.SURFACE[:3], 0.85),
             background_normal="",
             background_active="",
             foreground_color=C.TEXT,
+            hint_text_color=(*C.TEXT_DIM[:3], 1),
             cursor_color=C.INDIGO_SOFT,
+            selection_color=(*C.INDIGO[:3], 0.45),
         )
+        # ENTER inside the field advances the wizard. Owning it here (rather
+        # than via Window.on_key_down) keeps the field's own key handling —
+        # backspace, arrows, selection — completely intact.
+        ti.bind(on_text_validate=lambda *_a: self._advance_from_field())
         self._text_input = ti
         self.add_widget(ti)
         self._place_text_input()
         ti.focus = True
-        Clock.schedule_once(lambda dt: ti.select_all(), 0.1)
+        if preset:
+            Clock.schedule_once(lambda dt: ti.select_all(), 0.1)
+        self.dirty = True
+
+    def _advance_from_field(self):
+        """ENTER in the Title field moves to Artist; in Artist, to Confirm."""
+        text = self._get_input_text().strip()
+        if self.reg_state == REG_STATE_INPUT_TITLE:
+            if not text:
+                return
+            self.reg_title = text
+            self.reg_state = REG_STATE_INPUT_ARTIST
+            self._show_text_input("Enter Artist Name:", preset=self.reg_artist,
+                                  hint="Artist name")
+        elif self.reg_state == REG_STATE_INPUT_ARTIST:
+            self.reg_artist = text
+            self._remove_text_input()
+            self.reg_state = REG_STATE_CONFIRM
         self.dirty = True
 
     def _place_text_input(self):
@@ -2632,6 +2666,3 @@ class UI(FloatLayout):
 
         self._file_meta[filename] = (title, duration)
         return title, duration
-
-    def _get_title_from_file(self, filename):
-        return self._file_meta_for(filename)[0]
