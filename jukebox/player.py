@@ -1,3 +1,4 @@
+import json
 import subprocess
 import threading
 import time
@@ -15,12 +16,15 @@ class Player:
     def __init__(self):
         self.current_track = None
         self.is_playing = False
+        self.is_paused = False
         self._stop_requested = False
         self.lock = threading.Lock()
         self.last_error = None
         self.on_status_change = None
         self.play_start_time = None
         self._backend = None
+        self.volume = 68
+        self._paused_at = None
 
     def _report(self, msg):
         print(f"[Player] {msg}")
@@ -30,12 +34,152 @@ class Player:
             except Exception:
                 pass
 
+    # ── mpv control channel ──────────────────────────────────────────────────
+    # mpv runs as a subprocess with no stdin we can drive, so pause/volume go
+    # over its JSON IPC socket (a named pipe on Windows, a unix socket else).
+
+    def _ipc_path(self):
+        if os.name == "nt":
+            return r"\\.\pipe\utune-mpv-%d" % os.getpid()
+        return os.path.join(tempfile.gettempdir(), "utune-mpv-%d.sock" % os.getpid())
+
+    def _mpv_ipc(self, command):
+        payload = json.dumps({"command": command}).encode("utf-8") + b"\n"
+        path = self._ipc_path()
+        try:
+            if os.name == "nt":
+                with open(path, "wb", buffering=0) as pipe:
+                    pipe.write(payload)
+            else:
+                import socket
+
+                sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                sock.settimeout(0.5)
+                try:
+                    sock.connect(path)
+                    sock.sendall(payload)
+                finally:
+                    sock.close()
+            return True
+        except Exception as e:
+            print(f"[Player] mpv ipc failed ({command[0]}): {e}")
+            return False
+
+    def _backend_kind(self, backend):
+        if backend is None:
+            return None
+        if is_android():
+            return "android"
+        if hasattr(backend, "terminate"):
+            return "mpv"
+        return "kivy"
+
+    # ── volume ───────────────────────────────────────────────────────────────
+
+    def set_volume(self, level):
+        """Set output volume, 0-100. Applies live and to subsequent tracks."""
+        level = max(0, min(100, int(level)))
+        self.volume = level
+        self._apply_volume()
+
+    def _apply_volume(self):
+        with self.lock:
+            backend = self._backend
+        kind = self._backend_kind(backend)
+        try:
+            if kind == "android":
+                gain = self.volume / 100.0
+                backend.setVolume(gain, gain)
+            elif kind == "mpv":
+                self._mpv_ipc(["set_property", "volume", self.volume])
+            elif kind == "kivy":
+                backend.volume = self.volume / 100.0
+        except Exception as e:
+            print(f"[Player] set volume failed: {e}")
+
+    # ── pause / resume ───────────────────────────────────────────────────────
+
+    def pause(self):
+        if not self.is_playing or self.is_paused:
+            return
+        with self.lock:
+            backend = self._backend
+        kind = self._backend_kind(backend)
+        if kind is None:
+            return
+
+        # Raise the flag *before* touching the backend. The per-backend wait
+        # loops use is_paused to stay alive, and stopping a Kivy Sound would
+        # otherwise race them straight into _cleanup() and drop the track.
+        self.is_paused = True
+        self._paused_at = time.time()
+        try:
+            if kind == "android":
+                backend.pause()
+            elif kind == "mpv":
+                if not self._mpv_ipc(["set_property", "pause", True]):
+                    raise RuntimeError("mpv ipc unavailable")
+            elif kind == "kivy":
+                # Kivy's Sound has no pause; remember the position and stop.
+                try:
+                    self._kivy_pos = backend.get_pos()
+                except Exception:
+                    self._kivy_pos = 0
+                backend.stop()
+        except Exception as e:
+            self.is_paused = False
+            self._paused_at = None
+            print(f"[Player] pause failed: {e}")
+            return
+
+        self._report("Paused")
+
+    def resume(self):
+        if not self.is_paused:
+            return
+        with self.lock:
+            backend = self._backend
+        kind = self._backend_kind(backend)
+        if kind is None:
+            return
+
+        try:
+            if kind == "android":
+                backend.start()
+            elif kind == "mpv":
+                if not self._mpv_ipc(["set_property", "pause", False]):
+                    return
+            elif kind == "kivy":
+                backend.play()
+                try:
+                    backend.seek(getattr(self, "_kivy_pos", 0))
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"[Player] resume failed: {e}")
+            return
+
+        # Keep the progress bar honest: discount the time spent paused.
+        if self.play_start_time and self._paused_at:
+            self.play_start_time += time.time() - self._paused_at
+        self.is_paused = False
+        self._paused_at = None
+        self._report("Resumed")
+
+    def toggle_pause(self):
+        if self.is_paused:
+            self.resume()
+        else:
+            self.pause()
+
     def play(self, source, track_info=None):
         self.stop()
         with self.lock:
             self._stop_requested = False
             self.current_track = track_info
             self.is_playing = True
+            self.is_paused = False
+            self._paused_at = None
             self.last_error = None
             self.play_start_time = None
 
@@ -81,11 +225,13 @@ class Player:
                 self._backend = mp
                 self.play_start_time = time.time()
 
+            self._apply_volume()
             self._report(f"Playing: {title}")
             mp.start()
 
-            # Wait for completion in a thread
-            while mp.isPlaying() and not self._stop_requested:
+            # Wait for completion. A paused MediaPlayer reports isPlaying()
+            # False, so the pause flag has to hold the loop open.
+            while (mp.isPlaying() or self.is_paused) and not self._stop_requested:
                 if not self.current_track.get("duration"):
                     dur = mp.getDuration()
                     if dur > 0:
@@ -109,6 +255,8 @@ class Player:
             "--quiet",
             "--term-playing-msg=PLAYBACK_STARTED",
             "--terminal=yes",
+            f"--input-ipc-server={self._ipc_path()}",
+            f"--volume={self.volume}",
             file_path,
         ]
 
@@ -170,22 +318,24 @@ class Player:
             self._backend = sound
             self.play_start_time = time.time()
 
+        self._apply_volume()
         self._report(f"Playing: {title}")
-        
+
         # We must play from main thread safely
         def do_play(dt):
             if sound:
                 sound.play()
         Clock.schedule_once(do_play, 0)
-        
+
         # Wait up to 2 seconds for state to transition to 'play'
         for _ in range(20):
             if sound.state == 'play' or self._stop_requested:
                 break
             time.sleep(0.1)
 
-        # Wait while playing
-        while sound.state == 'play' and not self._stop_requested:
+        # Wait while playing. Pausing a Kivy Sound means stopping it, so the
+        # pause flag has to hold the loop open.
+        while (sound.state == 'play' or self.is_paused) and not self._stop_requested:
             if not self.current_track.get("duration"):
                 if hasattr(sound, 'length') and sound.length > 0:
                     self.current_track["duration"] = sound.length
@@ -235,6 +385,8 @@ class Player:
     def _cleanup(self):
         with self.lock:
             self.is_playing = False
+            self.is_paused = False
+            self._paused_at = None
             self.current_track = None
             self._backend = None
             self.play_start_time = None
@@ -242,6 +394,8 @@ class Player:
     def stop(self):
         with self.lock:
             self._stop_requested = True
+            self.is_paused = False
+            self._paused_at = None
             backend = self._backend
 
         if backend is None:
