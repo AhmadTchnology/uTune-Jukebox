@@ -556,7 +556,9 @@ class UI(FloatLayout):
 
         # Progress bar
         prog_w = info_w - int(dp(16))
-        self._draw_progress_bar(info_x, art_y + int(dp(16)), prog_w)
+        prog_y = info_top - offset - int(dp(30))
+        prog_y = max(art_y + int(dp(30)), prog_y)
+        self._draw_progress_bar(info_x, prog_y, prog_w)
 
     def _draw_album_art(self, x, y, size, track):
         cache_key = f"{track.get('title', '?')}_{'img' if track.get('image_bytes') else 'no'}"
@@ -603,9 +605,8 @@ class UI(FloatLayout):
             return
 
         bar_h = int(dp(6))
-        time_w = int(dp(45))
-        bar_x = x + time_w
-        bar_w = w - time_w * 2
+        bar_x = x
+        bar_w = w
 
         if not self.player.play_start_time:
             # Loading indicator — pulsing bar
@@ -615,16 +616,12 @@ class UI(FloatLayout):
             pulse_x = int((bar_w - pulse_w) * ((math.sin(self.pulse_phase * 4) + 1) / 2))
             Color(*C.CYAN)
             RoundedRectangle(pos=(bar_x + pulse_x, y), size=(pulse_w, bar_h), radius=[3])
-            self._text("Loading stream...", bar_x, y + int(dp(16)), font_size=sp(16), color=C.CYAN)
+            self._text("Loading stream...", bar_x, y - int(dp(22)), font_size=sp(16), color=C.CYAN)
             return
 
         elapsed = _time.time() - self.player.play_start_time
         duration = track.get("duration")
         pct = min(1.0, elapsed / float(duration)) if duration else 1.0
-
-        # Draw start time
-        mins, secs = int(elapsed) // 60, int(elapsed) % 60
-        self._text(f"{mins}:{secs:02d}", x, y - int(dp(6)), font_size=sp(14), color=_rgba(C.CYAN, 0.8))
 
         # Background
         Color(1, 1, 1, 0.1)
@@ -643,12 +640,16 @@ class UI(FloatLayout):
             Color(*C.CYAN[:3], 0.4)
             Ellipse(pos=(bar_x + fill_w - dot_sz, y + bar_h // 2 - dot_sz), size=(dot_sz*2, dot_sz*2))
 
+        # Draw start time
+        mins, secs = int(elapsed) // 60, int(elapsed) % 60
+        self._text(f"{mins}:{secs:02d}", bar_x, y - int(dp(22)), font_size=sp(14), color=_rgba(C.CYAN, 0.8))
+
         # Draw end time
         if duration:
             dur = float(duration)
             dm, ds = int(dur) // 60, int(dur) % 60
             # Right align duration
-            self._text(f"{dm}:{ds:02d}", x + w - int(dp(35)), y - int(dp(6)), font_size=sp(14), color=C.TEXT_MUTED)
+            self._text(f"{dm}:{ds:02d}", bar_x + bar_w - int(dp(35)), y - int(dp(22)), font_size=sp(14), color=C.TEXT_MUTED)
 
     def _draw_idle(self, x, y_pad, w, h):
         cx = x + w // 2
@@ -987,7 +988,9 @@ class UI(FloatLayout):
             size=(min(int(dp(1200)), self.width - int(dp(100))), int(dp(80))),
             pos_hint={'center_x': 0.5, 'center_y': 0.5},
             font_size=sp(40),
-            background_color=(C.GLASS_BG[0], C.GLASS_BG[1], C.GLASS_BG[2], 0.9),
+            background_color=(1, 1, 1, 0.1),
+            background_normal='',
+            background_active='',
             foreground_color=C.TEXT,
             cursor_color=C.CYAN,
             padding=[16, 12],
@@ -995,6 +998,7 @@ class UI(FloatLayout):
         self._text_input = ti
         self.add_widget(ti)
         ti.focus = True
+        Clock.schedule_once(lambda dt: ti.select_all(), 0.1)
 
     def _get_input_text(self):
         if self._text_input:
