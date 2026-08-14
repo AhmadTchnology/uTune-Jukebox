@@ -51,6 +51,7 @@ REG_STATE_INPUT_URL    = "input_url"
 REG_STATE_DOWNLOADING  = "downloading"
 REG_STATE_PICK_FILE    = "pick_file"
 REG_STATE_INPUT_TITLE  = "input_title"
+REG_STATE_INPUT_ARTIST = "input_artist"
 REG_STATE_CONFIRM      = "confirm"
 REG_STATE_DONE         = "done"
 REG_STATE_LIST         = "list"
@@ -168,6 +169,7 @@ class UI(FloatLayout):
         self.existing_card = None
         self.selected_source = None
         self.reg_title = ""
+        self.reg_artist = ""
         self.reg_url = ""
         self.download_progress = ""
 
@@ -341,8 +343,16 @@ class UI(FloatLayout):
                     text = self._get_input_text()
                     if text.strip():
                         self.reg_title = text.strip()
-                        self._remove_text_input()
-                        self.reg_state = REG_STATE_CONFIRM
+                        self.reg_state = REG_STATE_INPUT_ARTIST
+                        self._show_text_input("Enter Artist Name:", preset="")
+                return True
+
+            if self.reg_state == REG_STATE_INPUT_ARTIST:
+                if key in (13, 271):
+                    text = self._get_input_text()
+                    self.reg_artist = text.strip()
+                    self._remove_text_input()
+                    self.reg_state = REG_STATE_CONFIRM
                 return True
 
             if self.reg_state == REG_STATE_CONFIRM:
@@ -417,7 +427,7 @@ class UI(FloatLayout):
         with self.canvas:
             if self.page == "player":
                 # STRICTLY LANDSCAPE LAYOUT
-                right_w = max(int(dp(360)), int(w * 0.35))
+                right_w = max(int(dp(280)), int(w * 0.28))
                 divider_x = w - right_w - pad
                 left_w = divider_x - pad
                 
@@ -441,6 +451,8 @@ class UI(FloatLayout):
                     self._draw_reg_pick_file(w, h)
                 elif self.reg_state == REG_STATE_INPUT_TITLE:
                     self._draw_reg_input_screen(w, h, "Enter Song Title:")
+                elif self.reg_state == REG_STATE_INPUT_ARTIST:
+                    self._draw_reg_input_screen(w, h, "Enter Artist Name:")
                 elif self.reg_state == REG_STATE_CONFIRM:
                     self._draw_reg_confirm(w, h)
                 elif self.reg_state == REG_STATE_DONE:
@@ -886,8 +898,14 @@ class UI(FloatLayout):
                 return True
 
         elif self.reg_state == REG_STATE_INPUT_TITLE:
-            btn_y = cy - int(dp(100))
-            if self._hit_btn(cx, btn_y, int(dp(240)), int(dp(54)), mx, my):
+            btn_y = cy - int(dp(120))
+            if self._hit_btn(cx, btn_y, int(dp(240)), int(dp(64)), mx, my):
+                self._submit_text_input()
+                return True
+
+        elif self.reg_state == REG_STATE_INPUT_ARTIST:
+            btn_y = cy - int(dp(120))
+            if self._hit_btn(cx, btn_y, int(dp(240)), int(dp(64)), mx, my):
                 self._submit_text_input()
                 return True
 
@@ -990,10 +1008,13 @@ class UI(FloatLayout):
 
     def _submit_text_input(self):
         text = self._get_input_text()
-        if not text.strip():
-            return
         if self.reg_state == REG_STATE_INPUT_TITLE:
+            if not text.strip(): return
             self.reg_title = text.strip()
+            self.reg_state = REG_STATE_INPUT_ARTIST
+            self._show_text_input("Enter Artist Name:", preset="")
+        elif self.reg_state == REG_STATE_INPUT_ARTIST:
+            self.reg_artist = text.strip()
             self._remove_text_input()
             self.reg_state = REG_STATE_CONFIRM
         self.dirty = True
@@ -1001,7 +1022,7 @@ class UI(FloatLayout):
     def _do_confirm_register(self):
         from registry import Registry
         registry = Registry(self.config.db_path)
-        registry.register_card(self.scanned_uid, self.reg_title, self.reg_url)
+        registry.register_card(self.scanned_uid, self.reg_title, self.reg_url, self.reg_artist)
         self.show_toast(f"Registered: {self.reg_title}")
         self.reg_state = REG_STATE_DONE
         self.dirty = True
@@ -1011,6 +1032,7 @@ class UI(FloatLayout):
         self.existing_card = None
         self.selected_source = None
         self.reg_title = ""
+        self.reg_artist = ""
         self.reg_url = ""
         self._remove_text_input()
         self.dirty = True
@@ -1088,7 +1110,8 @@ class UI(FloatLayout):
         cx, cy = w // 2, h // 2
         self._text("Confirm Registration", cx - int(dp(160)), cy + int(dp(140)), font_size=sp(36), color=C.TEXT, bold=True)
         self._text(f"UID: {self.scanned_uid}", cx - int(dp(160)), cy + int(dp(80)), font_size=sp(26), color=C.TEXT_SEC)
-        self._text(f"Title: {self.reg_title}", cx - int(dp(160)), cy + int(dp(30)), font_size=sp(26), color=C.TEXT_SEC)
+        self._text(f"Title: {self.reg_title}", cx - int(dp(160)), cy + int(dp(40)), font_size=sp(26), color=C.TEXT_SEC)
+        self._text(f"Artist: {self.reg_artist}", cx - int(dp(160)), cy, font_size=sp(26), color=C.TEXT_SEC)
         self._draw_reg_button(cx - int(dp(120)), cy - int(dp(120)), int(dp(200)), int(dp(54)), "Confirm", C.CYAN)
         self._draw_reg_button(cx + int(dp(120)), cy - int(dp(120)), int(dp(200)), int(dp(54)), "Cancel", C.TEXT_SEC)
 
@@ -1189,9 +1212,9 @@ class UI(FloatLayout):
         try:
             with sqlite3.connect(self.config.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT uid, title, file_path FROM cards ORDER BY date_added DESC")
+                cursor.execute("SELECT uid, title, file_path, artist FROM cards ORDER BY date_added DESC")
                 self.cards_list = [
-                    {"uid": r[0], "title": r[1], "url": r[2]} for r in cursor.fetchall()
+                    {"uid": r[0], "title": r[1], "url": r[2], "artist": r[3] or ""} for r in cursor.fetchall()
                 ]
         except Exception:
             self.cards_list = []

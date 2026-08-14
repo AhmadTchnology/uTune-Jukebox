@@ -85,8 +85,11 @@ class Player:
             mp.start()
 
             # Wait for completion in a thread
-            duration_ms = mp.getDuration()
             while mp.isPlaying() and not self._stop_requested:
+                if not self.current_track.get("duration"):
+                    dur = mp.getDuration()
+                    if dur > 0:
+                        self.current_track["duration"] = dur / 1000.0
                 time.sleep(0.5)
 
             if not self._stop_requested:
@@ -183,6 +186,9 @@ class Player:
 
         # Wait while playing
         while sound.state == 'play' and not self._stop_requested:
+            if not self.current_track.get("duration"):
+                if hasattr(sound, 'length') and sound.length > 0:
+                    self.current_track["duration"] = sound.length
             time.sleep(0.2)
             
         Clock.schedule_once(lambda dt: sound.stop(), 0)

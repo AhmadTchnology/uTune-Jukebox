@@ -9,7 +9,7 @@ class JukeboxQueue:
         self._items = []
         self._lock = threading.Lock()
 
-    def enqueue(self, uid, title, file_path, currently_playing_uid=None):
+    def enqueue(self, uid, title, file_path, artist="", currently_playing_uid=None):
         """Enqueues a song if it's not already in the queue or playing."""
         with self._lock:
             if currently_playing_uid == uid:
@@ -19,7 +19,7 @@ class JukeboxQueue:
                 if item["uid"] == uid:
                     return False
 
-            item = {"uid": uid, "title": title, "file_path": file_path}
+            item = {"uid": uid, "title": title, "artist": artist, "file_path": file_path}
             self._items.append(item)
             self._q.put(item)
 

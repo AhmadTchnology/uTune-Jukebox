@@ -13,6 +13,7 @@ class Registry:
                 CREATE TABLE IF NOT EXISTS cards (
                     uid TEXT PRIMARY KEY,
                     title TEXT NOT NULL,
+                    artist TEXT,
                     file_path TEXT NOT NULL,
                     date_added TIMESTAMP
                 )
@@ -22,30 +23,33 @@ class Registry:
             columns = [info[1] for info in cursor.fetchall()]
             if 'youtube_url' in columns and 'file_path' not in columns:
                 cursor.execute('ALTER TABLE cards RENAME COLUMN youtube_url TO file_path')
+            if 'artist' not in columns:
+                cursor.execute('ALTER TABLE cards ADD COLUMN artist TEXT')
             conn.commit()
 
     def get_card(self, uid):
         """Returns a dict with title and file_path if found, else None"""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT title, file_path FROM cards WHERE uid = ?', (uid,))
+            cursor.execute('SELECT title, file_path, artist FROM cards WHERE uid = ?', (uid,))
             row = cursor.fetchone()
             if row:
-                return {'title': row[0], 'file_path': row[1]}
+                return {'title': row[0], 'file_path': row[1], 'artist': row[2] or ""}
             return None
 
-    def register_card(self, uid, title, file_path):
+    def register_card(self, uid, title, file_path, artist=""):
         """Adds or updates a card in the registry."""
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute('''
-                INSERT INTO cards (uid, title, file_path, date_added)
-                VALUES (?, ?, ?, ?)
+                INSERT INTO cards (uid, title, artist, file_path, date_added)
+                VALUES (?, ?, ?, ?, ?)
                 ON CONFLICT(uid) DO UPDATE SET
                     title=excluded.title,
+                    artist=excluded.artist,
                     file_path=excluded.file_path,
                     date_added=excluded.date_added
-            ''', (uid, title, file_path, datetime.now()))
+            ''', (uid, title, artist, file_path, datetime.now()))
             conn.commit()
 
     def delete_card(self, uid):
