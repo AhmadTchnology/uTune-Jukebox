@@ -1,79 +1,52 @@
 # uTune Jukebox
 
-uTune is a modern, dark-themed RFID-powered jukebox application built with Python. 
-It allows users to link physical NFC/RFID cards to YouTube audio streams or local audio files. When a card is placed on the reader, uTune automatically plays the associated song, displaying beautiful album art and a dynamic glassmorphism UI.
+uTune is a dark-themed RFID/NFC jukebox built with Python and Kivy. Physical cards map to local audio files. When a card is scanned, the track is queued and played, with album art and a fullscreen jukebox UI.
 
-The latest version is fully optimized for **ARM Android Tablets** using **Kivy** and **Buildozer**, while still supporting desktop testing environments.
+Optimized for **ARM Android tablets** (Kivy + Buildozer) and usable on desktop for testing.
+
+Based on [uTune-Jukebox](https://github.com/AhmadTchnology/uTune-Jukebox) by [AhmadTchnology](https://github.com/AhmadTchnology), used with permission.
 
 ## Features
 
-- **Cross-Platform**: Runs on Android tablets (via Buildozer/Kivy) and Desktop.
-- **RFID/NFC Integration**: Supports USB OTG serial readers and USB keyboard emulators.
-- **YouTube Support**: Downloads and extracts audio directly via `yt-dlp`.
-- **Local Audio**: Plays local MP3/FLAC/WAV files with embedded album art extraction.
-- **Premium Interface**: Deep space background, glass cards, dynamic animations.
-- **Queue System**: Up-next queue with visual thumbnails.
+- **Cross-platform**: Android tablets (Buildozer/Kivy) and desktop
+- **RFID/NFC**: USB OTG serial readers, USB keyboard-emulating readers, and built-in Android NFC
+- **Local audio**: MP3/FLAC/WAV and other common formats, with album art when available
+- **Queue**: up-next list with thumbnails
+- **Fullscreen UI**: landscape 1920×1200 (Nexus 7 2013 and similar tablets)
 
-## Hardware Requirements (Android Tablet)
-- Android Tablet (Android 11+ recommended)
-- USB OTG Adapter
-- USB RFID Card Reader (e.g. standard 125kHz or 13.56MHz reader that emulates a keyboard or provides a serial interface over USB)
-- RFID/NFC Cards or Fobs
+## Hardware (Android tablet)
 
-## Installation & Packaging (Buildozer)
+- Android tablet (Android 11+ recommended)
+- USB OTG adapter (for USB readers)
+- USB RFID reader (keyboard-emulating or serial) **or** built-in NFC
+- RFID/NFC cards or fobs
 
-To package uTune as an Android APK, you must use a Linux environment (or WSL on Windows).
+## Desktop testing
 
-1. Install Buildozer:
-   ```bash
-   pip install --user buildozer
-   ```
+```bash
+pip install -r requirements.txt
+python jukebox/main.py
+```
 
-2. Initialize (Optional, already provided in repo):
-   ```bash
-   buildozer init
-   ```
+## Android packaging (Buildozer)
 
-3. Build the APK:
-   ```bash
-   # Make sure you are in the directory with buildozer.spec
-   buildozer -v android debug
-   ```
+Use Linux or WSL. From the directory that contains `buildozer.spec`:
 
-4. Deploy to connected Android device:
-   ```bash
-   buildozer -v android deploy run logcat
-   ```
-
-## Local Desktop Testing
-
-You can run uTune locally on your desktop for testing before packaging to Android.
-
-1. Install Python dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. Run the main jukebox UI:
-   ```bash
-   python jukebox/main.py
-   ```
-
-3. Run the card registration UI:
-   ```bash
-   python jukebox/register_cli.py
-   ```
+```bash
+pip install --user buildozer
+buildozer -v android debug
+buildozer -v android deploy run logcat
+```
 
 ## Configuration
 
-Configuration is managed via `jukebox/config.yaml`.
-- **rfid.mode**: Set to `keyboard` for USB readers that emulate keystrokes. Set to `serial` for COM/TTY readers.
-- **player.music_folder**: The directory where music is stored (defaults to a `music` folder in the app storage).
+Edit `jukebox/config.yaml`:
 
-## Card Registration
+- **rfid.mode**: `keyboard` (USB HID), `serial` (COM/TTY), or `nfc_android`
+- **player.music_folder**: folder for local audio (defaults to a `music` folder in app storage)
 
-To assign a song to an RFID card:
-1. Launch the Registration UI.
-2. Scan the card on the reader.
-3. Select whether to use a YouTube URL or a Local File.
-4. Confirm the details. The card is now linked!
+Local audio files belong in `jukebox/music/` (see that folder’s README). The database (`jukebox.db`) is created at runtime and is not committed.
+
+## License
+
+This project currently has no license file. Ask the original author before redistributing beyond this personal copy.
