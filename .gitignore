@@ -1,37 +1,49 @@
 # Secrets
 cookies.txt
+.env
+*.env
 
 # Databases
 jukebox.db
+*.db
 
-# Executables
-deno.exe
-
-# Python Cache
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
+.venv/
+venv/
+env/
 
-# IDEs & Tools
+# IDEs & tools
 .vscode/
-
-# Agents
+.idea/
 .agents/
 
-# Documents
-rfid-jukebox.md
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
 
 # Logs
 *.log
 
+# Executables
+deno.exe
+
+# Local documents / design references
+rfid-jukebox.md
 Full-Screen Jukebox Interface/
 Full-Screen Jukebox Interface.zip
 
+# Local music library (keep the placeholder README)
 music/
 scratch_merge.py
 
-# Buildozer
+# Buildozer / Android artifacts
 .buildozer/
 bin/
 *.apk
 *.aab
+*.keystore
+*.jks
