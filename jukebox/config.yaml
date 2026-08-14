@@ -17,6 +17,6 @@ player:
   # Option 2: Path to a Netscape-format cookies.txt file
   cookies_file: "cookies.txt"
 ui:
-  resolution: [1024, 600]
+  resolution: [1920, 1200]
   fullscreen: true
   fps: 30
