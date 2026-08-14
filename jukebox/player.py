@@ -172,6 +172,16 @@ class Player:
         else:
             self.pause()
 
+    def elapsed(self):
+        """Seconds of the current track that have actually been heard.
+
+        Frozen while paused, so the progress bar and clock stop with the audio.
+        """
+        if not self.play_start_time:
+            return 0.0
+        end = self._paused_at if (self.is_paused and self._paused_at) else time.time()
+        return max(0.0, end - self.play_start_time)
+
     def play(self, source, track_info=None):
         self.stop()
         with self.lock:
