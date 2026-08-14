@@ -23,7 +23,8 @@ import collections
 
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.textinput import TextInput
-from kivy.graphics import Color, Rectangle, RoundedRectangle, Line, Triangle
+from kivy.graphics import (Canvas, Color, Rectangle, RoundedRectangle, Line,
+                           Triangle)
 from kivy.graphics.texture import Texture
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
@@ -495,7 +496,15 @@ class UI(FloatLayout):
         self._input_label = ""
         self._btn_press = None
         self._drag = None
+        self._queue_drag = None
         self._hits = collections.OrderedDict()
+
+        # Everything we paint goes in its own sub-canvas. Clearing self.canvas
+        # directly would detach the canvases of any child widget (add_widget
+        # parents them here), which silently makes the registration TextInput
+        # invisible on the very next frame.
+        self._paint = Canvas()
+        self.canvas.add(self._paint)
 
         self.f = Frame(DESIGN_W, DESIGN_H)
         self.bind(size=self._on_resize)
@@ -578,8 +587,7 @@ class UI(FloatLayout):
         if track and self.player.play_start_time:
             duration = track.get("duration")
             if duration:
-                elapsed = now - self.player.play_start_time
-                target = min(1.0, elapsed / float(duration))
+                target = min(1.0, self._elapsed() / float(duration))
                 self._progress_smooth += (target - self._progress_smooth) * min(1.0, dt * 4)
             animate = True
 
@@ -685,6 +693,15 @@ class UI(FloatLayout):
         self.flash_active = True
         self.flash_start = _time.time()
 
+    def _elapsed(self):
+        """Playback position, frozen while paused."""
+        fn = getattr(self.player, "elapsed", None)
+        if callable(fn):
+            return fn()
+        if not self.player.play_start_time:
+            return 0.0
+        return max(0.0, _time.time() - self.player.play_start_time)
+
     def _estimate_wait(self, upcoming, index):
         """Seconds until the item at `index` starts, or None if unknowable."""
         track = self.player.current_track
@@ -694,8 +711,7 @@ class UI(FloatLayout):
         if track:
             duration = track.get("duration")
             if duration and self.player.play_start_time:
-                elapsed = _time.time() - self.player.play_start_time
-                total += max(0.0, float(duration) - elapsed)
+                total += max(0.0, float(duration) - self._elapsed())
                 known = True
             else:
                 total += 210.0
@@ -1076,7 +1092,7 @@ class UI(FloatLayout):
 
         self.f = Frame(w, h)
         self._build_background(w, h)
-        self.canvas.clear()
+        self._paint.clear()
         self.canvas.after.clear()
         self._hits.clear()
 
@@ -1089,7 +1105,7 @@ class UI(FloatLayout):
         else:
             reg_alpha = 1.0 if self.page == "register" else 0.0
 
-        with self.canvas:
+        with self._paint:
             if show_player and reg_alpha < 1.0:
                 self._draw_ambient("player")
                 self._draw_vignette()
@@ -1271,9 +1287,7 @@ class UI(FloatLayout):
 
     def _draw_progress(self, track):
         duration = track.get("duration")
-        elapsed = 0.0
-        if self.player.play_start_time:
-            elapsed = _time.time() - self.player.play_start_time
+        elapsed = self._elapsed()
         pct = self._progress_smooth if duration else 0.0
         pct = max(0.0, min(1.0, pct))
 
@@ -1509,13 +1523,32 @@ class UI(FloatLayout):
         self._text("Up to 20 tracks can wait in line", cx, EMPTY_TOP + 112, 20,
                    C.TEXT_DIM, halign="center")
 
+    def _slot_x(self, slot):
+        return PAD_X + slot * (QUEUE_CARD_W + QUEUE_CARD_GAP)
+
     def _draw_queue_row(self, upcoming):
         self._draw_queue_header(QUEUE_HEAD_Y, QUEUE_RULE_Y, upcoming)
 
         visible = min(len(upcoming), QUEUE_SLOTS)
-        for i in range(visible):
-            x = PAD_X + i * (QUEUE_CARD_W + QUEUE_CARD_GAP)
-            self._draw_queue_card(upcoming[i], i, x)
+        drag = self._queue_drag
+        dragging = bool(drag and drag["active"] and drag["index"] < visible)
+
+        # While dragging, the remaining cards close ranks around the gap the
+        # held card would leave, so the drop position is obvious.
+        order = list(range(visible))
+        if dragging:
+            order.insert(drag["target"], order.pop(drag["index"]))
+
+        for slot, idx in enumerate(order):
+            if dragging and idx == drag["index"]:
+                continue
+            self._draw_queue_card(upcoming[idx], idx, self._slot_x(slot),
+                                  number=slot + 1)
+
+        if dragging:
+            idx = drag["index"]
+            self._draw_queue_card(upcoming[idx], idx, drag["x"],
+                                  number=drag["target"] + 1, lifted=True)
 
         extra = len(upcoming) - visible
         if extra > 0:
@@ -1530,16 +1563,24 @@ class UI(FloatLayout):
                 self._text("MORE", cx, QUEUE_TOP + 98, 16, C.TEXT_MUTED, "mono",
                            tracking=0.16, halign="center")
 
-    def _draw_queue_card(self, item, index, x):
+    def _draw_queue_card(self, item, index, x, number=None, lifted=False):
         uid = item.get("uid", f"idx_{index}")
         slide = self._queue_slide.get(uid, 1.0)
         alpha = min(1.0, slide * 1.6)
         y = QUEUE_TOP + (1.0 - _ease_out_back(slide)) * 24
+        if number is None:
+            number = index + 1
 
         just_added = uid is not None and uid == self._new_queue_uid
         (c0, a0), (c1, a1), num_a = QUEUE_TINTS[min(index, len(QUEUE_TINTS) - 1)]
 
-        if just_added:
+        if lifted:
+            # held card: raised off the row and glowing so it reads as grabbed
+            y -= 16
+            alpha = 1.0
+            self._glow(x, y, QUEUE_CARD_W, QUEUE_ART_H, 14, C.INDIGO_SOFT,
+                       0.55, 48)
+        elif just_added:
             c0, a0, c1, a1, num_a = C.MAGENTA, 0.32, C.INDIGO, 0.20, 0.20
             self._glow(x, y, QUEUE_CARD_W, QUEUE_ART_H, 14, C.INDIGO_SOFT,
                        0.22 * alpha, 40)
@@ -1555,18 +1596,21 @@ class UI(FloatLayout):
             self._grad_fill(x, y, QUEUE_CARD_W, QUEUE_ART_H, _rgba(c0, a0),
                             _rgba(c1, a1), radius=14, alpha=alpha)
 
-        if index == 0 or just_added:
-            border, border_a = ((C.MAGENTA, 0.50) if just_added
-                                else (C.INDIGO_SOFT, 0.35))
+        if lifted:
+            border, border_a = C.INDIGO_SOFT, 0.75
+        elif just_added:
+            border, border_a = C.MAGENTA, 0.50
+        elif number == 1:
+            border, border_a = C.INDIGO_SOFT, 0.35
         else:
             border, border_a = C.WHITE, B_SUBTLE
         self._stroke(x, y, QUEUE_CARD_W, QUEUE_ART_H, border, radius=14,
                      alpha=border_a * alpha)
 
-        self._text(f"{index + 1:02d}", x + 16, y + QUEUE_ART_H - 8, 52, C.WHITE,
+        self._text(f"{number:02d}", x + 16, y + QUEUE_ART_H - 8, 52, C.WHITE,
                    "display", valign="bottom", alpha=num_a * alpha)
 
-        tag = "JUST ADDED" if just_added else ("NEXT" if index == 0 else None)
+        tag = "JUST ADDED" if just_added else ("NEXT" if number == 1 else None)
         if tag:
             self._text(tag, x + QUEUE_CARD_W - 14, y + 14, 15, C.MAGENTA_SOFT,
                        "mono", tracking=0.14, halign="right", alpha=alpha)
@@ -1577,6 +1621,9 @@ class UI(FloatLayout):
         if artist:
             self._text(artist, x, y + QUEUE_ART_H + 54, 19, C.TEXT_MUTED,
                        max_w=QUEUE_CARD_W, alpha=alpha)
+
+        if not lifted:
+            self._hit(f"queue.card.{index}", x, y, QUEUE_CARD_W, QUEUE_BLOCK_H)
 
     def _queue_thumb(self, item, uid):
         img_bytes = item.get("image_bytes")
@@ -2278,22 +2325,76 @@ class UI(FloatLayout):
             self._set_volume_from_touch(mx)
             return True
 
+        if name.startswith("queue.card."):
+            self._begin_queue_drag(int(name.rsplit(".", 1)[1]), mx)
+            return True
+
         self._activate(name)
         return True
 
     def on_touch_move(self, touch):
+        mx, _my = self.to_local(touch.x, touch.y)
         if self._drag == "volume":
-            mx, _my = self.to_local(touch.x, touch.y)
             self._set_volume_from_touch(mx)
+            return True
+        if self._drag == "queue":
+            self._update_queue_drag(mx)
             return True
         return super().on_touch_move(touch)
 
     def on_touch_up(self, touch):
+        if self._drag == "queue":
+            self._finish_queue_drag()
         if self._btn_press or self._drag:
             self._btn_press = None
             self._drag = None
             self.dirty = True
         return super().on_touch_up(touch)
+
+    # ── queue reordering (drag and drop) ─────────────────────────────────────
+
+    def _begin_queue_drag(self, index, mx):
+        upcoming = self.queue_mgr.get_upcoming()
+        if index >= min(len(upcoming), QUEUE_SLOTS):
+            return
+        self._drag = "queue"
+        self._queue_drag = {
+            "index": index,
+            "target": index,
+            "grab_dx": mx - self.f.x(self._slot_x(index)),
+            "start_mx": mx,
+            "x": self._slot_x(index),
+            "active": False,
+        }
+        self.dirty = True
+
+    def _update_queue_drag(self, mx):
+        drag = self._queue_drag
+        if not drag:
+            return
+        # a short press that never travels is a tap, not a drag
+        if not drag["active"]:
+            if abs(mx - drag["start_mx"]) < self.f.u(14):
+                return
+            drag["active"] = True
+
+        slots = min(len(self.queue_mgr.get_upcoming()), QUEUE_SLOTS)
+        span = QUEUE_CARD_W + QUEUE_CARD_GAP
+        x = (mx - drag["grab_dx"] - self.f.ox) / self.f.s
+        drag["x"] = max(PAD_X - span / 2.0,
+                        min(PAD_X + (slots - 1) * span + span / 2.0, x))
+        target = int(round((drag["x"] - PAD_X) / span))
+        drag["target"] = max(0, min(slots - 1, target))
+        self.dirty = True
+
+    def _finish_queue_drag(self):
+        drag = self._queue_drag
+        self._queue_drag = None
+        if not drag or not drag["active"]:
+            return
+        if drag["index"] != drag["target"]:
+            self.queue_mgr.reorder(drag["index"], drag["target"])
+        self.dirty = True
 
     def _set_volume_from_touch(self, mx):
         rect = self._hits.get("volume")
