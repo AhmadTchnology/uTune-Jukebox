@@ -23,8 +23,9 @@ import collections
 
 from kivy.uix.floatlayout import FloatLayout
 from kivy.uix.textinput import TextInput
-from kivy.graphics import (Canvas, Color, Rectangle, RoundedRectangle, Line,
-                           Triangle)
+from kivy.graphics import (Canvas, ClearBuffers, ClearColor, Color, Rectangle,
+                           RoundedRectangle, Line, Triangle, Quad)
+from kivy.graphics.fbo import Fbo
 from kivy.graphics.texture import Texture
 from kivy.clock import Clock
 from kivy.core.image import Image as CoreImage
@@ -315,6 +316,44 @@ def _vignette_tex():
     return tex
 
 
+# ── Brand lockup (design_handoff logo.svg, flattened to quads) ───────────────
+# Every path in the source SVG is a 4-point polygon, so the mark draws as 22
+# Quads grouped by colour — 26 instructions, no raster asset, resolution free.
+LOGO_W, LOGO_H = 1853.0, 445.0
+LOGO_SHAPES = (
+    (_c(179, 136, 235), (
+        (241.8, 330.6, 354.7, 330.6, 354.7, 443.5, 241.8, 443.5),
+    )),
+    (_c(255, 255, 255), (
+        (441.4, 2.2, 661.1, 2.1, 661.1, 111.8, 441.4, 111.9),
+        (552.1, 74.9, 550.9, 443.3, 440.2, 442.9, 441.4, 74.5),
+        (540.5, 333.0, 665.9, 333.0, 665.9, 442.9, 540.5, 442.9),
+        (883.1, 217.3, 665.6, 443.8, 586.4, 367.7, 803.9, 141.3),
+        (883.7, 2.4, 882.9, 217.2, 773.9, 216.8, 774.7, 2.0),
+        (963.5, 1.2, 1401.3, 1.2, 1401.3, 110.7, 963.5, 110.7),
+        (1236.1, 1.0, 1237.8, 329.7, 1128.3, 330.3, 1126.6, 1.5),
+        (1122.3, 279.9, 1198.4, 201.4, 1368.2, 366.2, 1292.1, 444.6),
+        (1065.8, 443.7, 986.8, 368.2, 1150.4, 197.2, 1229.4, 272.8),
+        (1291.7, 330.8, 1401.2, 330.8, 1401.2, 444.7, 1291.7, 444.7),
+        (956.1, 328.4, 1066.5, 328.4, 1066.5, 443.2, 956.1, 443.2),
+        (1475.1, 236.9, 1524.8, 187.5, 1729.7, 393.3, 1680.1, 442.7),
+        (1475.2, 237.3, 1475.4, 163.3, 1545.2, 163.5, 1545.1, 237.4),
+        (1678.9, 443.1, 1679.0, 369.2, 1748.9, 369.3, 1748.7, 443.3),
+    )),
+    (_c(108, 99, 255), (
+        (1852.8, 209.7, 1803.4, 259.3, 1597.6, 54.4, 1647.0, 4.8),
+        (1852.7, 209.3, 1852.9, 283.3, 1783.0, 283.5, 1782.9, 209.5),
+        (1648.2, 4.4, 1648.3, 78.3, 1578.5, 78.5, 1578.3, 4.5),
+    )),
+    (_c(0, 255, 255), (
+        (0.3, 337.9, 111.3, 337.9, 111.3, 444.1, 0.3, 444.1),
+        (178.6, 148.2, 258.6, 223.4, 80.6, 412.8, 0.5, 337.6),
+        (1.3, 119.0, 77.3, 39.7, 263.4, 218.1, 187.5, 297.4),
+        (1.3, 2.1, 111.8, 2.1, 111.8, 119.1, 1.3, 119.1),
+    )),
+)
+
+
 REG_STATE_HOME = "home"
 REG_STATE_WAITING_SCAN = "waiting_scan"
 REG_STATE_PICK_SOURCE = "pick_source"
@@ -371,11 +410,17 @@ class TextCache:
 
     Glyphs are rendered white and tinted by the ``Color`` in front of them, so
     one texture serves every colour it is drawn in.
+
+    Letter-spaced labels are composed once into a single texture (see
+    :meth:`run`). Drawing them glyph-by-glyph costs three canvas instructions
+    and — far worse on a tiled mobile GPU — one texture bind per character.
     """
 
-    def __init__(self, max_size=768):
+    def __init__(self, max_size=768, run_size=192):
         self.cache = collections.OrderedDict()
         self.max_size = max_size
+        self.runs = collections.OrderedDict()
+        self.run_size = run_size
         self._body = _resolve_font(FONT_BODY)
         self._display = _resolve_font(FONT_DISPLAY, fallback=self._body)
         self._mono = _resolve_font(FONT_MONO, fallback=self._body)
@@ -417,6 +462,68 @@ class TextCache:
         if len(self.cache) > self.max_size:
             self.cache.popitem(last=False)
         return tex
+
+    # Below this length the per-glyph path is cheap enough that composing is
+    # not worth an Fbo. It also keeps ticking labels (the elapsed clock, a
+    # countdown) from minting a new GPU surface every second.
+    RUN_MIN_CHARS = 8
+
+    def run(self, text, font_size, family, bold, spacing):
+        """A letter-spaced string flattened into one texture.
+
+        Returns ``(texture, width, height)``; the texture is drawn with a
+        single Rectangle instead of one per glyph. Returns None for short
+        strings, where the caller should fall back to per-glyph drawing.
+        """
+        if len(text) < self.RUN_MIN_CHARS:
+            return None
+
+        key = (text, font_size, family, bold, round(spacing, 2))
+        hit = self.runs.get(key)
+        if hit is not None:
+            self.runs.move_to_end(key)
+            return hit[1]
+
+        glyphs = []
+        width = 0.0
+        height = 0
+        for ch in text:
+            if ch == " ":
+                glyphs.append((None, font_size * 0.34))
+                width += font_size * 0.34 + spacing
+                continue
+            tex = self.get(ch, font_size, family, bold)
+            if tex is None:
+                width += spacing
+                continue
+            glyphs.append((tex, tex.width))
+            width += tex.width + spacing
+            height = max(height, tex.height)
+        width = max(1.0, width - spacing)
+        if not height:
+            return None
+
+        # noadd: this is composed once, off to the side. Without it the Fbo
+        # attaches to whatever canvas is being built and re-renders every frame.
+        fbo = Fbo(size=(int(math.ceil(width)), int(height)), noadd=True)
+        with fbo:
+            ClearColor(0, 0, 0, 0)
+            ClearBuffers()
+            Color(1, 1, 1, 1)
+            pen = 0.0
+            for tex, advance in glyphs:
+                if tex is not None:
+                    Rectangle(texture=tex, pos=(pen, 0), size=tex.size)
+                pen += advance + spacing
+        fbo.draw()
+        texture = fbo.texture
+
+        # Keep the Fbo alive alongside its texture, else the GPU surface is
+        # freed the moment it falls out of scope.
+        self.runs[key] = (fbo, (texture, width, height))
+        if len(self.runs) > self.run_size:
+            self.runs.popitem(last=False)
+        return texture, width, height
 
 
 class UI(FloatLayout):
@@ -467,6 +574,8 @@ class UI(FloatLayout):
         self._art_texture = None
         self._mini_cache = {}
         self._file_meta = {}
+        self._card_count_cache = None
+        self._music_folder = None
         self._text_cache = TextCache()
         self._queue_slide = {}
         self._new_queue_uid = None
@@ -870,6 +979,14 @@ class UI(FloatLayout):
             return [self.f.u(min(r, limit)) for r in radius]
         return [self.f.u(min(radius, limit))]
 
+    def _segments(self, radii):
+        """Corner tessellation proportional to radius.
+
+        Kivy spends 10 segments per corner whatever the size, which is a lot
+        of geometry for a 4px pill on a 2013 GPU.
+        """
+        return max(2, min(10, int(max(radii) / 2.5) + 2))
+
     def _fill(self, x, y, w, h, color=None, radius=0, alpha=None, texture=None):
         f = self.f
         if color is None:
@@ -877,8 +994,9 @@ class UI(FloatLayout):
         Color(*color[:3], alpha if alpha is not None else color[3])
         px, py, pw, ph = f.rect(x, y, w, h)
         if radius:
+            radii = self._radii(radius, w, h)
             RoundedRectangle(texture=texture, pos=(px, py), size=(pw, ph),
-                             radius=self._radii(radius, w, h))
+                             radius=radii, segments=self._segments(radii))
         else:
             Rectangle(texture=texture, pos=(px, py), size=(pw, ph))
 
@@ -930,8 +1048,12 @@ class UI(FloatLayout):
             self._fill(x - grow, y - grow, w + grow * 2, h + grow * 2,
                        color, radius=radius + grow, alpha=a)
 
-    def _glow_circle(self, cx, cy, d, color, alpha, spread, steps=6):
-        self._glow(cx - d / 2.0, cy - d / 2.0, d, d, d / 2.0, color, alpha, spread, steps)
+    def _glow_circle(self, cx, cy, d, color, alpha, spread):
+        """Round glow as one textured quad instead of six stacked rings."""
+        size = d + spread * 2.0
+        Color(*color[:3], alpha * 0.75)
+        Rectangle(texture=_radial_tex(),
+                  **self._rect_kw(cx - size / 2.0, cy - size / 2.0, size, size))
 
     def _grad_fill(self, x, y, w, h, c0, c1, radius=0, alpha=1.0, diagonal=True):
         self._fill(x, y, w, h, C.WHITE, radius=radius, alpha=alpha,
@@ -966,14 +1088,15 @@ class UI(FloatLayout):
         fs = max(6, int(round(f.u(size))))
         text = str(text)
         if tracking and tracking * fs >= 1.0:
-            total = 0.0
-            for ch in text:
-                if ch == " ":
-                    total += fs * 0.34
-                    continue
-                tex = self._glyph(ch, fs, family, bold)
-                total += tex.size[0] if tex else 0
-            total += tracking * fs * max(0, len(text) - 1)
+            run = self._text_cache.run(text, fs, family, bold, tracking * fs)
+            if run:
+                total = run[1]
+            else:
+                total = sum(fs * 0.34 if ch == " " else
+                            (self._glyph(ch, fs, family, bold).width
+                             if self._glyph(ch, fs, family, bold) else 0)
+                            for ch in text)
+                total += tracking * fs * max(0, len(text) - 1)
         else:
             tex = self._text_cache.get(text, fs, family, bold)
             total = tex.size[0] if tex else 0
@@ -1002,31 +1125,38 @@ class UI(FloatLayout):
         col = (color[0], color[1], color[2],
                alpha if alpha is not None else color[3])
 
-        if not tracked:
+        if tracked:
+            run = self._text_cache.run(text, fs, family, bold, tracking * fs)
+            if run:
+                tex, tw, th = run
+            else:
+                # short label: cheaper to lay the glyphs out directly
+                pen = f.x(x)
+                step = tracking * fs
+                for ch in text:
+                    if ch == " ":
+                        pen += fs * 0.34 + step
+                        continue
+                    gtex = self._glyph(ch, fs, family, bold)
+                    if not gtex:
+                        pen += step
+                        continue
+                    gw, gh = gtex.size
+                    Color(*col)
+                    Rectangle(texture=gtex, pos=(int(pen),
+                                                 int(self._text_y(y, gh, valign))),
+                              size=(gw, gh))
+                    pen += gw + step
+                return width
+        else:
             tex = self._text_cache.get(text, fs, family, bold)
             if not tex:
                 return width
             tw, th = tex.size
-            py = self._text_y(y, th, valign)
-            Color(*col)
-            Rectangle(texture=tex, pos=(int(f.x(x)), int(py)), size=(tw, th))
-            return width
 
-        pen = f.x(x)
-        step = tracking * fs
-        for ch in text:
-            if ch == " ":
-                pen += fs * 0.34 + step
-                continue
-            tex = self._glyph(ch, fs, family, bold)
-            if not tex:
-                pen += step
-                continue
-            tw, th = tex.size
-            py = self._text_y(y, th, valign)
-            Color(*col)
-            Rectangle(texture=tex, pos=(int(pen), int(py)), size=(tw, th))
-            pen += tw + step
+        py = self._text_y(y, th, valign)
+        Color(*col)
+        Rectangle(texture=tex, pos=(int(f.x(x)), int(py)), size=(tw, th))
         return width
 
     def _text_y(self, y, th, valign):
@@ -1175,8 +1305,7 @@ class UI(FloatLayout):
         self._draw_wordmark(PAD_X, cy)
         x = PAD_X + self._measure("UTUNE", 40, "display", tracking=0.16) + 26
         self._vrule(x, cy - 17, 34)
-        self._text("RFID JUKEBOX", x + 27, cy, 19, C.TEXT_MUTED, "mono",
-                   tracking=0.18, valign="middle")
+        self._draw_logo(x + 27, cy, 34)
 
         # right cluster, laid out right → left
         right = CONTENT_R
@@ -1201,6 +1330,22 @@ class UI(FloatLayout):
                    halign="right", valign="middle")
 
         self._draw_status_pill(x - lw - cw - 24, cy, *status)
+
+    def _draw_logo(self, x, cy, height):
+        """The uTune brand mark, drawn straight from its flattened SVG quads."""
+        f = self.f
+        scale = height / LOGO_H
+        top = cy - height / 2.0
+        for color, polys in LOGO_SHAPES:
+            Color(*color)
+            for p in polys:
+                Quad(points=[
+                    f.x(x + p[0] * scale), f.y(top + p[1] * scale),
+                    f.x(x + p[2] * scale), f.y(top + p[3] * scale),
+                    f.x(x + p[4] * scale), f.y(top + p[5] * scale),
+                    f.x(x + p[6] * scale), f.y(top + p[7] * scale),
+                ])
+        return LOGO_W * scale
 
     def _draw_wordmark(self, x, cy, size=40, tracking=0.16):
         """`UTUNE` in the brand gradient — approximated per glyph."""
@@ -2483,6 +2628,7 @@ class UI(FloatLayout):
                 from registry import Registry
                 uid = self.cards_list[index]["uid"]
                 Registry(self.config.db_path).delete_card(uid)
+                self._card_count_cache = None
                 self._load_cards_list()
                 self._toast(f"Deleted card {uid[:6]}…", 2.0)
             return
@@ -2674,6 +2820,7 @@ class UI(FloatLayout):
         Registry(self.config.db_path).register_card(
             self.scanned_uid, self.reg_title, self.reg_url, self.reg_artist
         )
+        self._card_count_cache = None
         self.reg_state = REG_STATE_DONE
         self.dirty = True
 
@@ -2690,7 +2837,7 @@ class UI(FloatLayout):
         self.dirty = True
 
     def _scan_local_files(self):
-        folder = self.config.music_folder
+        folder = self._music_dir()
         if not os.path.isdir(folder):
             self.local_files = []
             return
@@ -2716,23 +2863,39 @@ class UI(FloatLayout):
                 ]
         except Exception:
             self.cards_list = []
+        self._card_count_cache = len(self.cards_list)
         self.cards_scroll = 0
         self.dirty = True
 
     def _card_count(self):
-        try:
-            with sqlite3.connect(self.config.db_path) as conn:
-                return conn.cursor().execute("SELECT COUNT(*) FROM cards").fetchone()[0]
-        except Exception:
-            return 0
+        """Registered-card count, cached.
+
+        The register header draws this every frame; querying SQLite 30 times a
+        second is the most expensive thing on that screen on eMMC storage.
+        """
+        if self._card_count_cache is None:
+            try:
+                with sqlite3.connect(self.config.db_path) as conn:
+                    self._card_count_cache = conn.cursor().execute(
+                        "SELECT COUNT(*) FROM cards").fetchone()[0]
+            except Exception:
+                self._card_count_cache = 0
+        return self._card_count_cache
+
+    def _music_dir(self):
+        """config.music_folder runs os.makedirs() on every access, so resolve
+        it once rather than per frame."""
+        if self._music_folder is None:
+            self._music_folder = self.config.music_folder
+        return self._music_folder
 
     def _short_folder(self):
         """`…/jukebox/music` — the tail of the path is the useful part."""
-        parts = [p for p in str(self.config.music_folder).replace("\\", "/").split("/") if p]
+        parts = [p for p in str(self._music_dir()).replace("\\", "/").split("/") if p]
         return "/".join(parts[-2:]) if parts else ""
 
     def _sidecar_path(self, filename):
-        file_path = os.path.join(self.config.music_folder,
+        file_path = os.path.join(self._music_dir(),
                                  str(filename).replace("\\", "/"))
         json_path = file_path + ".info.json"
         if not os.path.exists(json_path):
