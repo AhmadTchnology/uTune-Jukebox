@@ -50,3 +50,7 @@ Local audio files belong in `jukebox/music/` (see that folder’s README). The d
 ## License
 
 This project currently has no license file. Ask the original author before redistributing beyond this personal copy.
+
+---
+
+### Made With ❤️ By AhmadTchnology
